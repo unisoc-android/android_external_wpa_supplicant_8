@@ -1532,6 +1532,18 @@ static void wpa_supplicant_process_3_of_4(struct wpa_sm *sm,
 		goto failed;
 	}
 
+	//NOTE: Bug#515092 Add 11r/okc roaming offload develop in supplicant BEG-->
+	if ((sm->key_mgmt) & WPA_KEY_MGMT_IEEE8021X) {
+		if (wpa_sm_set_key(sm, WPA_ALG_PMK, NULL, 0, 0, NULL, 0, sm->pmk, PMK_LEN) < 0)
+			wpa_printf(MSG_DEBUG, "WPA: Failed to set PMK to the driver");
+	}
+
+	if ((sm->key_mgmt) & (WPA_KEY_MGMT_FT_PSK | WPA_KEY_MGMT_FT_IEEE8021X)) {
+		if (wpa_sm_set_key(sm, WPA_ALG_PMK, NULL, 0, 0, NULL, 0, sm->xxkey, PMK_LEN) < 0)
+			wpa_printf(MSG_DEBUG, "WPA: Failed to set FT xxkey to the driver");
+	}
+	//<-- Add 11r/okc roaming offload develop in supplicant END
+
 	if (ieee80211w_set_keys(sm, &ie) < 0) {
 		wpa_msg(sm->ctx->msg_ctx, MSG_INFO,
 			"RSN: Failed to configure IGTK");

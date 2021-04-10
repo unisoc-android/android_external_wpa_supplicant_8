@@ -1207,6 +1207,8 @@ void ap_sta_set_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 {
 	const u8 *dev_addr = NULL;
 	char buf[100];
+	char softap_event[100];
+
 #ifdef CONFIG_P2P
 	u8 addr[ETH_ALEN];
 	u8 ip_addr_buf[4];
@@ -1264,6 +1266,13 @@ void ap_sta_set_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 		wpa_msg(hapd->msg_ctx, MSG_INFO, AP_STA_CONNECTED "%s%s%s",
 			buf, ip_addr, keyid_buf);
 
+		sprintf(softap_event,AP_STA_CONNECTED"%s%s",buf,ip_addr);
+		wpa_printf(MSG_ERROR,"hostadp softapevent = %s ",softap_event);
+		if(hapd->sta_info_event_cb != NULL){
+		    hapd->sta_info_event_cb_ctx = softap_event;
+		    hapd->sta_info_event_cb(hapd->sta_info_event_cb_ctx);
+		}
+
 		if (hapd->msg_ctx_parent &&
 		    hapd->msg_ctx_parent != hapd->msg_ctx)
 			wpa_msg_no_global(hapd->msg_ctx_parent, MSG_INFO,
@@ -1271,6 +1280,12 @@ void ap_sta_set_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 					  buf, ip_addr, keyid_buf);
 	} else {
 		wpa_msg(hapd->msg_ctx, MSG_INFO, AP_STA_DISCONNECTED "%s", buf);
+
+		if(hapd->sta_info_event_cb != NULL) {
+			sprintf(softap_event,AP_STA_DISCONNECTED"%s",buf);
+			hapd->sta_info_event_cb_ctx = softap_event;
+			hapd->sta_info_event_cb(hapd->sta_info_event_cb_ctx);
+		}
 
 		if (hapd->msg_ctx_parent &&
 		    hapd->msg_ctx_parent != hapd->msg_ctx)

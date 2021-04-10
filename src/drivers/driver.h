@@ -3458,7 +3458,7 @@ struct wpa_driver_ops {
 	 * @buf_len: Buffer length
 	 * Returns: 0 on success, -1 on failure
 	 */
-	int (*driver_cmd)(void *priv, char *cmd, char *buf, size_t buf_len);
+	int (*driver_cmd)(void *priv, unsigned char *cmd, char *buf, size_t buf_len);
 #endif /* ANDROID */
 
 	/**
@@ -3756,6 +3756,8 @@ struct wpa_driver_ops {
 	 * Returns: 0 on success, -1 on failure
 	 */
 	int (*set_mac_addr)(void *priv, const u8 *addr);
+
+	int (*set_p2p_mac_addr)(void *priv, const u8 *addr);
 
 #ifdef CONFIG_MACSEC
 	int (*macsec_init)(void *priv, struct macsec_init_params *params);
@@ -4703,6 +4705,14 @@ enum wpa_event_type {
 	 * This event is emitted when an interface is added/removed for WDS STA.
 	 */
 	EVENT_WDS_STA_INTERFACE_STATUS,
+
+       /**
+	 * EVENT_SPRD_SOTF_RESET - softap soft reset
+	 * this is used for sprd vendor process in case of LTE & softap co-exist,
+	 * which will cause hostapd disable/enable iface & trigger ACS instead of
+	 * reload wlan driver & restart hostapd
+	 */
+	EVENT_SPRD_SOFT_RESET,
 };
 
 

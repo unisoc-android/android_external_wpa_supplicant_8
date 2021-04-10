@@ -125,6 +125,14 @@ static void wpa_bss_tmp_disallow_timeout(void *eloop_ctx, void *timeout_ctx);
 static void wpas_update_fils_connect_params(struct wpa_supplicant *wpa_s);
 #endif /* CONFIG_FILS && IEEE8021X_EAPOL */
 
+#define P2P_MGMT_DEVICE_PREFIX "p2p-dev-"
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+int wpas_start_assoc_wapi_network_cb(struct wpa_supplicant *wpa_s,
+	struct wpa_ssid *ssid, struct wpa_bss *bss, struct wpa_driver_associate_params params);
+#endif
+//<-- Porting WAPI feature END
 
 /* Configure default/group WEP keys for static WEP */
 int wpa_set_wep_keys(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid)
@@ -484,6 +492,17 @@ static void wpa_supplicant_cleanup(struct wpa_supplicant *wpa_s)
 	eapol_sm_register_scard_ctx(wpa_s->eapol, NULL);
 	l2_packet_deinit(wpa_s->l2);
 	wpa_s->l2 = NULL;
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	if (wpa_s->wapi) {
+		dlclose(wpa_s->wapi->handle);
+		l2_packet_deinit(wpa_s->wapi->l2_wapi);
+		wpa_s->wapi->l2_wapi = NULL;
+		os_free(wpa_s->wapi);
+		wpa_s->wapi = NULL;
+	}
+#endif
+//<-- Porting WAPI feature END
 	if (wpa_s->l2_br) {
 		l2_packet_deinit(wpa_s->l2_br);
 		wpa_s->l2_br = NULL;
@@ -2508,6 +2527,93 @@ int wpa_is_fils_sk_pfs_supported(struct wpa_supplicant *wpa_s)
 
 #endif /* CONFIG_FILS */
 
+#ifdef CONFIG_SAE
+static int wpa_sprd_sae_ielen(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid)
+{
+	size_t ie_len = 2 + 4; /* IE hdr + vendor OUI */
+	char *psk = NULL;
+	int *groups = wpa_s->conf->sae_groups;
+	int i;
+
+	if (!wpa_key_mgmt_sae(ssid->key_mgmt))
+		return 0;
+	psk = ssid->sae_password;
+	if (!psk)
+		psk = ssid->passphrase;
+	if (!psk) {
+		wpa_printf(MSG_ERROR, "SPRD SAE: no PSK found.");
+		return 0;
+	}
+	ie_len += os_strlen(psk);
+	ie_len += 2; /* subtype + subtype_len */
+	if (ssid->sae_password_id) {
+		ie_len += os_strlen(ssid->sae_password_id);
+		ie_len += 2; /* subtype + subtype_len */
+	}
+	if (groups) {
+		for (i = 0; groups[i] > 0; i++)
+			ie_len += 1;
+		ie_len += 2; /* subtype + subtype_len */
+	}
+	wpa_printf(MSG_INFO, "SPRD vendor SAE IE len: %zu", ie_len);
+
+	if (ie_len > 255) {
+		wpa_printf(MSG_ERROR, "FATAL: SPRD SAE IE len overflow: %zu", ie_len);
+		return 0;
+	}
+	return ie_len;
+}
+
+
+static struct wpabuf *wpa_sprd_build_sae_ie(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid)
+{
+	size_t ie_len = wpa_sprd_sae_ielen(wpa_s, ssid);
+	int *groups = wpa_s->conf->sae_groups;
+	struct wpabuf *ie;
+	char *psk;
+
+	if (!ie_len)
+		return NULL;
+	ie = wpabuf_alloc(ie_len);
+
+	if (!ie) {
+		wpa_printf(MSG_ERROR, "SPRD SAE: alloc ie buf failed");
+		return NULL;
+	}
+
+	wpabuf_put_u8(ie, WLAN_EID_VENDOR_SPECIFIC);
+	wpabuf_put_u8(ie, ie_len - 2); /* exclude IE hdr */
+	wpabuf_put_be32(ie, SPRD_SAE_CNN_OUI);
+
+	psk = ssid->sae_password;
+	if (!psk)
+		psk = ssid->passphrase;
+
+	wpabuf_put_u8(ie, SPRD_SAE_CNN_PW); /* sub-type */
+	wpabuf_put_u8(ie, os_strlen(psk)); /* sub-type len */
+	wpabuf_put_str(ie, psk); /* value */
+
+	if (groups) {
+		wpabuf_put_u8(ie, SPRD_SAE_CNN_GRPID);
+		u8 *len = wpabuf_put(ie, 1);
+		u8 grp_len = 0;
+		int i;
+
+		for (i = 0; groups[i] > 0; i++) {
+			grp_len++;
+			wpabuf_put_u8(ie, groups[i]);
+		}
+		*len = grp_len;
+	}
+	if (ssid->sae_password_id) {
+		wpabuf_put_u8(ie, SPRD_SAE_CNN_PWID);
+		wpabuf_put_u8(ie, os_strlen(ssid->sae_password_id));
+		wpabuf_put_str(ie, ssid->sae_password_id);
+	}
+	wpa_hexdump(MSG_INFO, "SPRD vendor SAE IEs", wpabuf_head(ie), wpabuf_len(ie));
+	return ie;
+}
+#endif
 
 static u8 * wpas_populate_assoc_ies(
 	struct wpa_supplicant *wpa_s,
@@ -2537,7 +2643,10 @@ static u8 * wpas_populate_assoc_ies(
 				  2 + 2 * wpabuf_len(req->pkt) / 255;
 	}
 #endif /* CONFIG_FILS */
-
+#ifdef CONFIG_SAE
+	/* append SPRD vendor SAE IEs */
+	max_wpa_ie_len += wpa_sprd_sae_ielen(wpa_s, ssid);
+#endif
 	wpa_ie = os_malloc(max_wpa_ie_len);
 	if (!wpa_ie) {
 		wpa_printf(MSG_ERROR,
@@ -2560,12 +2669,21 @@ static u8 * wpas_populate_assoc_ies(
 		if (wpa_key_mgmt_fils(ssid->key_mgmt))
 			cache_id = wpa_bss_get_fils_cache_id(bss);
 #endif /* CONFIG_FILS */
+#ifdef CONFIG_SAE
+		wpa_s->sme.sae_pmksa_caching = 0;
+#endif
 		if (pmksa_cache_set_current(wpa_s->wpa, NULL, bss->bssid,
 					    ssid, try_opportunistic,
 					    cache_id, 0) == 0) {
 			eapol_sm_notify_pmkid_attempt(wpa_s->eapol);
 #ifdef CONFIG_SAE
 			sae_pmksa_cached = 1;
+			if (wpa_key_mgmt_sae(ssid->key_mgmt)) {
+				wpa_printf(MSG_DEBUG, "SPRD SAE: SAE PMKSA found");
+				wpa_s->sme.sae_pmksa_caching = 1;
+			}
+			if (ssid->key_mgmt == WPA_KEY_MGMT_OWE)
+				wpa_printf(MSG_DEBUG, "SPRD OWE: OWE PMKSA found");
 #endif /* CONFIG_SAE */
 		}
 		wpa_ie_len = max_wpa_ie_len;
@@ -2936,7 +3054,18 @@ pfs_fail:
 		}
 		wpa_ie_len += multi_ap_ie_len;
 	}
-
+#ifdef CONFIG_SAE
+	/* build sprd vendor IEs */
+	if (wpa_key_mgmt_sae(ssid->key_mgmt)) {
+		struct wpabuf *sae_ie = wpa_sprd_build_sae_ie(wpa_s, ssid);
+		if (sae_ie) {
+			os_memcpy(wpa_ie + wpa_ie_len,
+				wpabuf_head(sae_ie), wpabuf_len(sae_ie));
+			wpa_ie_len += wpabuf_len(sae_ie);
+			wpabuf_free(sae_ie);
+		}
+	}
+#endif
 	params->wpa_ie = wpa_ie;
 	params->wpa_ie_len = wpa_ie_len;
 	params->auth_alg = algs;
@@ -3099,6 +3228,14 @@ static void wpas_start_assoc_cb(struct wpa_radio_work *work, int deinit)
 
 	wpa_supplicant_cancel_scan(wpa_s);
 
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	if (wpas_start_assoc_wapi_network_cb(wpa_s, ssid, bss, params) != -1) return;
+#endif
+//<-- Porting WAPI feature END
+
+	wpa_sm_set_assoc_wpa_ie(wpa_s->wpa, NULL, 0);
 	/* Starting new association, so clear the possibly used WPA IE from the
 	 * previous association. */
 	wpa_sm_set_assoc_wpa_ie(wpa_s->wpa, NULL, 0);
@@ -4362,6 +4499,52 @@ static void wpa_supplicant_rx_eapol_bridge(void *ctx, const u8 *src_addr,
 				len - sizeof(*eth));
 }
 
+#ifdef CONFIG_WAPI
+static int wpa_load_wapi(struct wpa_supplicant *wpa_s)
+{
+#define WAPI_LOAD_SYMBOL(W, S) \
+	do {\
+		W->S = dlsym(handle, #S);\
+		if (!W->S) {\
+			wpa_dbg(wpa_s, MSG_ERROR, "WAPI: load wapi symbol %s failed: %s", #S, dlerror());\
+			goto free;\
+		}\
+		wpa_dbg(wpa_s, MSG_INFO, "WAPI: loaded symbol %s : %p", #S, W->S);\
+	} while(0)
+
+	const char *wapiso_path = CONFIG_WAPISO_PATH;
+	void *handle = dlopen(wapiso_path, RTLD_NOW);
+
+	if (!handle) {
+		wpa_dbg(wpa_s, MSG_INFO, "WAPI: not supported: %s: path:%s", dlerror(), CONFIG_WAPISO_PATH);
+		goto failed;
+	}
+	wpa_s->wapi = os_zalloc(sizeof(struct wapi));
+	if (!wpa_s->wapi) {
+		wpa_dbg(wpa_s, MSG_ERROR, "WAPI: alloc wapi failed.");
+		goto close;
+	}
+	WAPI_LOAD_SYMBOL(wpa_s->wapi, wapi_build_assoc_params);
+	WAPI_LOAD_SYMBOL(wpa_s->wapi, wapi_process_assoc_event);
+	WAPI_LOAD_SYMBOL(wpa_s->wapi, wapi_process_disassoc_event);
+	WAPI_LOAD_SYMBOL(wpa_s->wapi, iwn_set_debug_level);
+	WAPI_LOAD_SYMBOL(wpa_s->wapi, wapi_rx_wai);
+	WAPI_LOAD_SYMBOL(wpa_s->wapi, wpa_global_priv);
+	/* store wpa_s->global memory address for libwapi */
+	wpa_s->wapi->wpa_global_priv(wpa_s->global);
+	wpa_s->wapi->handle = handle;
+
+	return 0;
+free:
+	os_free(wpa_s->wapi);
+	wpa_s->wapi = NULL;
+close:
+	dlclose(handle);
+failed:
+	return -1;
+#undef WAPI_LOAD_SYMBOL
+}
+#endif
 
 /**
  * wpa_supplicant_driver_init - Initialize driver interface parameters
@@ -4378,6 +4561,30 @@ int wpa_supplicant_driver_init(struct wpa_supplicant *wpa_s)
 
 	if (wpa_supplicant_update_mac_addr(wpa_s) < 0)
 		return -1;
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	if(os_strcmp(wpa_s->ifname,"wlan0") == 0 && wpa_load_wapi(wpa_s) == 0) {
+		/*wapi only works under station mode*/
+		wpa_printf(MSG_DEBUG, "WAPI: Create layer2 socket for WAI TX/RX ");
+		wpa_s->wapi->l2_wapi = l2_packet_init(wpa_s->ifname,
+						wpa_drv_get_mac_addr(wpa_s),
+						ETH_P_WAI,
+						wpa_s->wapi->wapi_rx_wai, wpa_s, 0);
+		if (wpa_s->wapi->l2_wapi == NULL)
+			return -1;
+		/* call backs in wpa_supplicant */
+		wpa_s->wapi->wapi_printf = wpa_printf;
+		wpa_printf(MSG_DEBUG, "WAPI: init wapi lib callbacks: %p:%p", wpa_s, wpa_s->wapi->wapi_printf);
+		wpa_s->wapi->wapi_hexdump = wpa_hexdump;
+		wpa_s->wapi->wapi_msg = wpa_msg;
+		wpa_s->wapi->l2_packet_send = l2_packet_send;
+		wpa_s->wapi->wapi_deauth = wpa_supplicant_deauthenticate;
+		wpa_s->wapi->wapi_set_state = wpa_supplicant_set_state;
+		wpa_s->wapi->wapi_disconnect_notify = wpas_notify_wapi_disconnect;
+	}
+#endif
+//<-- Porting WAPI feature END
 
 	wpa_dbg(wpa_s, MSG_DEBUG, "Own MAC address: " MACSTR,
 		MAC2STR(wpa_s->own_addr));
@@ -6137,6 +6344,21 @@ struct wpa_supplicant * wpa_supplicant_add_iface(struct wpa_global *global,
 	if (global == NULL || iface == NULL)
 		return NULL;
 
+	if (strstr(iface->ifname, "p2p0")) {
+		wpa_s = wpa_supplicant_get_iface(global, "p2p-dev-wlan0");
+		wpa_printf(MSG_INFO, "return created p2p device interface: %p", wpa_s);
+		if (wpa_s != NULL) {
+		    return wpa_s;
+		} else if (global->ifaces) {
+		    wpas_p2p_add_p2pdev_interface(
+		        global->ifaces, iface->confname);
+		    wpa_s = wpa_supplicant_get_iface(global, "p2p-dev-wlan0");
+		    return wpa_s;
+		}
+		return wpa_s;
+	}
+
+
 	wpa_s = wpa_supplicant_alloc(parent);
 	if (wpa_s == NULL)
 		return NULL;
@@ -6178,6 +6400,13 @@ struct wpa_supplicant * wpa_supplicant_add_iface(struct wpa_global *global,
 			wpas_notify_network_added(wpa_s, ssid);
 	}
 
+	if (os_strstr(wpa_s->ifname, P2P_MGMT_DEVICE_PREFIX)) {
+		wpa_s->p2p_mgmt = 0;
+		wpa_dbg(wpa_s, MSG_DEBUG, "%s: Adding all saved p2p network", wpa_s->ifname);
+		for (ssid = wpa_s->conf->ssid; ssid; ssid = ssid->next)
+			wpas_notify_network_added(wpa_s, ssid);
+		wpa_s->p2p_mgmt = iface->p2p_mgmt;
+	}
 	wpa_s->next = global->ifaces;
 	global->ifaces = wpa_s;
 
@@ -6296,6 +6525,9 @@ struct wpa_supplicant * wpa_supplicant_get_iface(struct wpa_global *global,
 						 const char *ifname)
 {
 	struct wpa_supplicant *wpa_s;
+
+	if (strstr(ifname, "p2p0"))
+		ifname = "p2p-dev-wlan0";
 
 	for (wpa_s = global->ifaces; wpa_s; wpa_s = wpa_s->next) {
 		if (os_strcmp(wpa_s->ifname, ifname) == 0)
@@ -7516,3 +7748,53 @@ int wpa_is_bss_tmp_disallowed(struct wpa_supplicant *wpa_s,
 
 	return 1;
 }
+
+//=============================================================================
+// add by sprd start
+//=============================================================================
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+int wpas_start_assoc_wapi_network_cb(struct wpa_supplicant *wpa_s,
+	struct wpa_ssid *ssid, struct wpa_bss *bss, struct wpa_driver_associate_params params)
+{
+	if (!wpa_s->wapi || !(ssid->proto & WPA_PROTO_WAPI))
+		return -1;
+
+	if (wpa_s->wapi->wapi_build_assoc_params(ssid)) {
+		wpa_printf(MSG_ERROR, "WAPI: build assoc params failed");
+		wpas_connect_work_done(wpa_s);
+		return 0;
+	}
+	if (bss) {
+		/* set parameters to driver */
+		params.ssid = bss->ssid;
+		params.ssid_len = bss->ssid_len;
+		params.bssid = bss->bssid;
+		params.freq.freq = bss->freq;
+		params.mode = ssid->mode;
+		params.auth_alg = ssid->auth_alg;
+		params.wpa_proto = ssid->proto;
+		params.key_mgmt_suite = ssid->key_mgmt;
+		params.pairwise_suite = WPA_CIPHER_SMS4;
+		params.group_suite = WPA_CIPHER_SMS4;
+		params.wpa_ie = wpa_s->wapi->assoc_wapi_ie;
+		params.wpa_ie_len = wpa_s->wapi->assoc_wapi_ie_len;
+	} else {
+		wpa_printf(MSG_DEBUG, "bss=null\n");
+		wpas_connect_work_done(wpa_s);
+		return 0;
+	}
+
+	if (!memcmp(wpa_s->bssid, "\x00\x00\x00\x00\x00\x00", ETH_ALEN)) {
+		wpa_supplicant_req_auth_timeout(wpa_s, 20, 0);
+		wpa_supplicant_set_state(wpa_s, WPA_ASSOCIATING);
+		if (wpa_drv_associate(wpa_s, &params))
+			wpa_printf(MSG_ERROR, "WAPI: wapi_drv_associate() failed\n");
+	}
+	wpa_s->current_ssid = ssid;
+	wpa_s->current_bss = bss;
+	return 0;
+}
+#endif
+//<-- Porting WAPI feature END

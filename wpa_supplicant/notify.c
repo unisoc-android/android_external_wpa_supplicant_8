@@ -271,6 +271,22 @@ void wpas_notify_network_request(struct wpa_supplicant *wpa_s,
 	wpas_hidl_notify_network_request(wpa_s, ssid, rtype, default_txt);
 }
 
+void wpas_notify_offload_roam(struct wpa_supplicant *wpa_s, const char *reason)
+{
+	if (wpa_s->p2p_mgmt)
+		return;
+	wpas_hidl_notify_offload_roam(wpa_s, reason);
+}
+
+void wpas_notify_wapi_disconnect(struct wpa_supplicant *wpa_s, const char *reason)
+{
+	if (wpa_s->p2p_mgmt)
+		return;
+#ifdef CONFIG_WAPI
+	wpas_hidl_notify_wapi_disconnect(wpa_s, reason);
+#endif
+}
+
 
 void wpas_notify_scanning(struct wpa_supplicant *wpa_s)
 {

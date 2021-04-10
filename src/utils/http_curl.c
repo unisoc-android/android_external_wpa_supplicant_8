@@ -1028,6 +1028,7 @@ static int curl_cb_ssl_verify(int preverify_ok, X509_STORE_CTX *x509_ctx)
 
 	name = X509_get_subject_name(cert);
 	X509_NAME_oneline(name, buf, sizeof(buf));
+	wpa_printf(MSG_DEBUG, "curl_cb_ssl_verify, cert_name: 0x%p", name);
 	wpa_printf(MSG_INFO, "Server certificate chain - depth=%d err=%d (%s) subject=%s",
 		   depth, err, err_str, buf);
 	debug_dump_cert("Server certificate chain - certificate", cert);

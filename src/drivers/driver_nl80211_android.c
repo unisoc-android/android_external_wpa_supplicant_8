@@ -22,7 +22,11 @@
 
 
 typedef struct android_wifi_priv_cmd {
+#ifdef USE_64_BIT_IPC
+	u64 buf;
+#else
 	char *buf;
+#endif
 	int used_len;
 	int total_len;
 } android_wifi_priv_cmd;
@@ -55,6 +59,13 @@ static int android_priv_cmd(struct i802_bss *bss, const char *cmd)
 	os_strlcpy(buf, cmd, sizeof(buf));
 
 	priv_cmd.buf = buf;
+//NOTE: Bug#692685 Add for SoftAp Advance Feature BEG-->
+#ifdef USE_64_BIT_IPC
+	priv_cmd.buf = (u64)(uintptr_t)buf;
+#else
+	priv_cmd.buf = buf;
+#endif
+//<-- Add for SoftAp Advance Feature END
 	priv_cmd.used_len = sizeof(buf);
 	priv_cmd.total_len = sizeof(buf);
 	ifr.ifr_data = &priv_cmd;
@@ -124,7 +135,12 @@ int android_pno_start(struct i802_bss *bss,
 	memset(&priv_cmd, 0, sizeof(priv_cmd));
 	os_strlcpy(ifr.ifr_name, bss->ifname, IFNAMSIZ);
 
+#ifdef USE_64_BIT_IPC
+	priv_cmd.buf = (u64)(uintptr_t)buf;
+#else
 	priv_cmd.buf = buf;
+#endif
+
 	priv_cmd.used_len = bp;
 	priv_cmd.total_len = bp;
 	ifr.ifr_data = &priv_cmd;

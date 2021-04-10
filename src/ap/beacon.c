@@ -31,6 +31,9 @@
 #include "hs20.h"
 #include "dfs.h"
 #include "taxonomy.h"
+#ifdef CONFIG_P2P
+#include "wpa_supplicant_i.h"
+#endif
 #include "ieee802_11_auth.h"
 
 
@@ -372,6 +375,24 @@ static u8 * hostapd_gen_probe_resp(struct hostapd_data *hapd,
 	struct ieee80211_mgmt *resp;
 	u8 *pos, *epos, *csa_pos;
 	size_t buflen;
+#ifdef CONFIG_P2P
+	wpa_printf(MSG_DEBUG, "build probe response with sigma mode: %d.", global_sigma_mode);
+	/*
+	 * BUG 797348:
+	 * IOT issue:
+	 * Some p2p GC (e.g Google nexus 6P Android 8.1) will not
+	 * include P2P IE
+	 * in probe request frames when do scan before connect to GO.
+	 * p2p supplicant will not attach P2P IE in probe response if
+	 * no P2P IE found in probe request, which will makes GC not
+	 * connect to GO.
+	 * solutions:
+	 * Add P2P IE in probe response no matter
+	 * if P2P IE exist in probe request expcept p2p sigma mode
+	 */
+	if (!global_sigma_mode)
+		is_p2p = 1;
+#endif
 
 #define MAX_PROBERESP_LEN 768
 	buflen = MAX_PROBERESP_LEN;

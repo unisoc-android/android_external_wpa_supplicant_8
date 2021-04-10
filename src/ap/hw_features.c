@@ -24,7 +24,6 @@
 #include "beacon.h"
 #include "hw_features.h"
 
-
 void hostapd_free_hw_features(struct hostapd_hw_modes *hw_features,
 			      size_t num_hw_features)
 {
@@ -43,6 +42,7 @@ void hostapd_free_hw_features(struct hostapd_hw_modes *hw_features,
 
 
 #ifndef CONFIG_NO_STDOUT_DEBUG
+
 static char * dfs_info(struct hostapd_channel_data *chan)
 {
 	static char info[256];
@@ -70,7 +70,6 @@ static char * dfs_info(struct hostapd_channel_data *chan)
 	return info;
 }
 #endif /* CONFIG_NO_STDOUT_DEBUG */
-
 
 int hostapd_get_hw_features(struct hostapd_iface *iface)
 {

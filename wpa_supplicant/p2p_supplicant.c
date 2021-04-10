@@ -38,6 +38,9 @@
 #include "p2p_supplicant.h"
 #include "wifi_display.h"
 
+//NOTE: Bug#707061 Add for configure p2p properties BEG -->
+#include <cutils/properties.h>
+//<-- Bug#707061 Add for configure p2p properties END
 
 /*
  * How many times to try to scan to find the GO before giving up on join
@@ -59,6 +62,10 @@
  */
 #define P2P_GO_CSA_COUNT 7
 #define P2P_GO_CSA_BLOCK_TX 0
+
+//NOTE: Bug#707061 Add for configure p2p properties BEG -->
+// #define WIFI_P2P_COEXIST "ro.wifip2p.coexist"
+//<-- Bug#707061 Add for configure p2p properties END
 
 #ifndef P2P_MAX_CLIENT_IDLE
 /*
@@ -117,7 +124,9 @@ enum p2p_group_removal_reason {
 	P2P_GROUP_REMOVAL_GO_LEAVE_CHANNEL
 };
 
-
+//NOTE: Bug#707061 Add for configure p2p properties BEG -->
+void set_p2p_persistent_reconnects(struct wpa_supplicant *wpa_s);
+//<-- Bug#707061 Add for configure p2p properties END
 static void wpas_p2p_long_listen_timeout(void *eloop_ctx, void *timeout_ctx);
 static struct wpa_supplicant *
 wpas_p2p_get_group_iface(struct wpa_supplicant *wpa_s, int addr_allocated,
@@ -1358,6 +1367,7 @@ static void wpas_group_formation_completed(struct wpa_supplicant *wpa_s,
 			persistent = ssid->p2p_persistent_group;
 			os_memcpy(go_dev_addr, wpa_s->global->p2p_dev_addr,
 				  ETH_ALEN);
+			os_memcpy(wpa_s->go_dev_addr, go_dev_addr, ETH_ALEN);
 		} else
 			persistent = wpas_p2p_persistent_group(wpa_s,
 							       go_dev_addr,
@@ -3137,7 +3147,7 @@ static void wpas_invitation_received(void *ctx, const u8 *sa, const u8 *bssid,
 				       MAC2STR(sa), MAC2STR(go_dev_addr));
 		}
 		wpas_notify_p2p_invitation_received(wpa_s, sa, go_dev_addr,
-						    bssid, 0, op_freq);
+						    bssid, -1, op_freq);
 		return;
 	}
 
@@ -3308,7 +3318,7 @@ static void wpas_invitation_result(void *ctx, int status, const u8 *bssid,
 	if (neg_freq > 0 && ssid->mode == WPAS_MODE_P2P_GO &&
 	    freq_included(wpa_s, channels, neg_freq))
 		freq = neg_freq;
-	else if (peer_oper_freq > 0 && ssid->mode != WPAS_MODE_P2P_GO &&
+	else if (peer_oper_freq > 0 && /*ssid->mode != WPAS_MODE_P2P_GO &&*/
 		 freq_included(wpa_s, channels, peer_oper_freq))
 		freq = peer_oper_freq;
 	else
@@ -4411,7 +4421,7 @@ int wpas_p2p_mac_setup(struct wpa_supplicant *wpa_s)
 		wpa_msg(wpa_s, MSG_DEBUG, "Restore last used MAC address.");
 	}
 
-	if (wpa_drv_set_mac_addr(wpa_s, addr) < 0) {
+	if (wpa_drv_set_p2p_mac_addr(wpa_s, addr) < 0) {
 		wpa_msg(wpa_s, MSG_INFO,
 			"Failed to set random MAC address");
 		return -EINVAL;
@@ -4616,10 +4626,27 @@ int wpas_p2p_init(struct wpa_global *global, struct wpa_supplicant *wpa_s)
 	}
 
 	p2p_set_no_go_freq(global->p2p, &wpa_s->conf->p2p_no_go_freq);
+	//NOTE: Bug#707061 Add for configure p2p properties BEG -->
+	set_p2p_persistent_reconnects(wpa_s);
+	//<-- Bug#707061 Add for configure p2p properties END
 
 	return 0;
 }
 
+//NOTE: Bug#707061 Add for configure p2p properties BEG -->
+void set_p2p_persistent_reconnects(struct wpa_supplicant *wpa_s)
+{
+	char value[PROPERTY_VALUE_MAX] = {'\0'};
+	// property_get(WIFI_P2P_COEXIST, value, "true");
+	strcpy(value, "true");  // "ro.wifip2p.coexist"---chip 2351: false, other wcn chip :true
+	wpa_printf(MSG_DEBUG,"get ro.wifip2p.coexist = %s",value);
+	if (os_strcasecmp(value, "true") == 0) {
+		wpa_s->conf->persistent_reconnect = 1;
+	} else {
+		wpa_s->conf->persistent_reconnect = 0;
+	}
+}
+//<-- Bug#707061 Add for configure p2p properties END
 
 /**
  * wpas_p2p_deinit - Deinitialize per-interface P2P data

@@ -928,6 +928,13 @@ static void wpa_config_write_network(FILE *f, struct wpa_ssid *ssid)
 	INT_DEF(vht_tx_mcs_nss_7, -1);
 	INT_DEF(vht_tx_mcs_nss_8, -1);
 #endif /* CONFIG_VHT_OVERRIDES */
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	INT(psk_key_type);
+	STR(wapi_as_cert);
+	STR(wapi_user_cert);
+#endif
+//<-- Porting WAPI feature END
 
 #undef STR
 #undef INT

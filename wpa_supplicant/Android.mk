@@ -63,10 +63,22 @@ ifeq ($(BOARD_WPA_SUPPLICANT_PRIVATE_LIB),)
 L_CFLAGS += -DANDROID_LIB_STUB
 endif
 
+ifeq ($(TARGET_KERNEL_ARCH), arm64)
+ifeq ($(TARGET_ARCH), arm)
+L_CFLAGS += -DUSE_64_BIT_IPC
+endif
+endif
+
 # Disable roaming in wpa_supplicant
 ifdef CONFIG_NO_ROAMING
 L_CFLAGS += -DCONFIG_NO_ROAMING
 endif
+
+# NOTE: Support wifi-p2p do not coexist BEG-->
+ifeq ($(BOARD_WLAN_DEVICE), sc2351)
+L_CFLAGS += -DCONFIG_SC2351
+endif
+# <-- Support wifi-p2p do not coexist END
 
 # Use Android specific directory for control interface sockets
 L_CFLAGS += -DCONFIG_CTRL_IFACE_CLIENT_DIR=\"/data/vendor/wifi/wpa/sockets\"
@@ -1681,11 +1693,16 @@ ifndef LDO
 LDO=$(CC)
 endif
 
+ifdef HS20_WFA_CERTIFICATION
+L_CFLAGS += -DHS20_WFA_CERTIFICATION
+endif
+
 ########################
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := wpa_cli
 LOCAL_PROPRIETARY_MODULE := true
+LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_SHARED_LIBRARIES := libc libcutils liblog
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_SRC_FILES := $(OBJS_c)
@@ -1723,6 +1740,12 @@ else
 LOCAL_STATIC_LIBRARIES += libnl_2
 endif
 endif
+
+#SPRD: Bug #474464 Porting WAPI feature BEG-->
+L_CFLAGS += -DCONFIG_WAPI
+L_CFLAGS += -DCONFIG_WAPISO_PATH=\"/vendor/lib/libwapi.so\"
+#<-- Porting WAPI feature END
+
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_SRC_FILES := $(OBJS)
 LOCAL_C_INCLUDES := $(INCLUDES)
@@ -1733,6 +1756,7 @@ ifeq ($(WPA_SUPPLICANT_USE_HIDL), y)
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.0
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.1
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.2
+LOCAL_SHARED_LIBRARIES += vendor.sprd.hardware.wifi.supplicant@1.2
 LOCAL_SHARED_LIBRARIES += libhidlbase libhidltransport libhwbinder libutils libbase
 LOCAL_STATIC_LIBRARIES += libwpa_hidl
 endif
@@ -1783,7 +1807,7 @@ LOCAL_VENDOR_MODULE := true
 LOCAL_CPPFLAGS := $(L_CPPFLAGS)
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_C_INCLUDES := $(INCLUDES)
-HIDL_INTERFACE_VERSION = 1.2
+HIDL_INTERFACE_VERSION = sprd_1.2
 LOCAL_SRC_FILES := \
     hidl/$(HIDL_INTERFACE_VERSION)/hidl.cpp \
     hidl/$(HIDL_INTERFACE_VERSION)/hidl_manager.cpp \
@@ -1797,6 +1821,7 @@ LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.supplicant@1.0 \
     android.hardware.wifi.supplicant@1.1 \
     android.hardware.wifi.supplicant@1.2 \
+    vendor.sprd.hardware.wifi.supplicant@1.2 \
     libbase \
     libhidlbase \
     libhidltransport \

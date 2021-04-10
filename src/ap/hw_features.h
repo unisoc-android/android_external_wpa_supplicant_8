@@ -10,6 +10,7 @@
 
 #ifndef HW_FEATURES_H
 #define HW_FEATURES_H
+#define SOFTAP_5G_MODE_FLAG 2
 
 #ifdef NEED_AP_MLME
 void hostapd_free_hw_features(struct hostapd_hw_modes *hw_features,
@@ -24,6 +25,9 @@ int hostapd_check_ht_capab(struct hostapd_iface *iface);
 int hostapd_prepare_rates(struct hostapd_iface *iface,
 			  struct hostapd_hw_modes *mode);
 void hostapd_stop_setup_timers(struct hostapd_iface *iface);
+int hostapd_update_channel(struct hostapd_iface *iface);
+int get_support_channel(int hostap_support_channel[]);
+
 #else /* NEED_AP_MLME */
 static inline void
 hostapd_free_hw_features(struct hostapd_hw_modes *hw_features,
@@ -39,6 +43,16 @@ static inline int hostapd_get_hw_features(struct hostapd_iface *iface)
 static inline int hostapd_acs_completed(struct hostapd_iface *iface, int err)
 {
 	return -1;
+}
+
+static inline int hostapd_update_channel(struct hostapd_iface *iface)
+{
+	return 0;
+}
+
+static inline int get_support_channel(int hostap_support_channel[])
+{
+	return 0;
 }
 
 static inline int hostapd_select_hw_mode(struct hostapd_iface *iface)

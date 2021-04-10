@@ -7,7 +7,10 @@ INCLUDES += $(LOCAL_PATH)/../../src
 INCLUDES += external/libxml2/include
 INCLUDES += external/curl/include
 INCLUDES += external/webkit/Source/WebKit/gtk
-
+INCLUDES += external/openssl/include
+INCLUDES += vendor/sprd/proprietories-source/video/extern/curl/include
+INCLUDES += external/icu/libandroidicu/include
+INCLUDES += system/core/include
 # We try to keep this compiling against older platform versions.
 # The new icu location (external/icu) exports its own headers, but
 # the older versions in external/icu4c don't, and we need to add those
@@ -37,8 +40,8 @@ OBJS += est.c
 OBJS += ../../src/common/wpa_ctrl.c
 OBJS += ../../src/common/wpa_helpers.c
 OBJS += ../../src/utils/xml-utils.c
-#OBJS += ../../src/utils/browser-android.c
-OBJS += ../../src/utils/browser-wpadebug.c
+OBJS += ../../src/utils/browser-android.c
+#OBJS += ../../src/utils/browser-wpadebug.c
 OBJS += ../../src/utils/wpabuf.c
 OBJS += ../../src/utils/eloop.c
 OBJS += ../../src/wps/httpread.c
@@ -59,18 +62,20 @@ OBJS += ../../src/crypto/tls_openssl_ocsp.c
 L_CFLAGS += -DEAP_TLS_OPENSSL
 
 L_CFLAGS += -Wno-unused-parameter
-
+L_CFLAGS += -DCONFIG_ANDROID_LOG
+L_CFLAGS += -DHS20_WFA_CERTIFICATION
 
 ########################
 include $(CLEAR_VARS)
 LOCAL_MODULE := hs20-osu-client
 LOCAL_MODULE_TAGS := optional
+LOCAL_PROPRIETARY_MODULE := true
+LOCAL_MODULE_RELATIVE_PATH := hw
 
-LOCAL_SHARED_LIBRARIES := libc libcutils
+LOCAL_SHARED_LIBRARIES := libc libcutils liblog
 LOCAL_SHARED_LIBRARIES += libcrypto libssl
-#LOCAL_SHARED_LIBRARIES += libxml2
-LOCAL_STATIC_LIBRARIES += libxml2
-LOCAL_SHARED_LIBRARIES += libicuuc
+LOCAL_SHARED_LIBRARIES += libxml2
+#LOCAL_STATIC_LIBRARIES += libxml2
 LOCAL_SHARED_LIBRARIES += libcurl
 
 LOCAL_CFLAGS := $(L_CFLAGS)

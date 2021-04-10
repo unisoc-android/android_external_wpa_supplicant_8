@@ -278,9 +278,15 @@ int android_nl_socket_set_nonblocking(struct nl_handle *handle);
 int android_pno_start(struct i802_bss *bss,
 		      struct wpa_driver_scan_params *params);
 int android_pno_stop(struct i802_bss *bss);
-extern int wpa_driver_nl80211_driver_cmd(void *priv, char *cmd, char *buf,
+extern int wpa_driver_nl80211_driver_cmd(void *priv, unsigned char *cmd, char *buf,
 					 size_t buf_len);
 
+//NOTE: Bug#519201 Add Marlin2 802.11v develop in supplicant BEG-->
+#ifndef CONFIG_BCMDHD
+extern int wpa_driver_nl80211_driver_cmd_wnm(void *priv, enum wnm_oper oper, const u8 *peer,
+			u8 *buf, u16 *buf_len);
+#endif
+//<-- Add Marlin2 802.11v develop in supplicant END
 #ifdef ANDROID_P2P
 int wpa_driver_set_p2p_noa(void *priv, u8 count, int start, int duration);
 int wpa_driver_get_p2p_noa(void *priv, u8 *buf, size_t len);
@@ -289,6 +295,12 @@ int wpa_driver_set_ap_wps_p2p_ie(void *priv, const struct wpabuf *beacon,
 				 const struct wpabuf *proberesp,
 				 const struct wpabuf *assocresp);
 #endif /* ANDROID_P2P */
+//NOTE: Bug#692685 Add for SoftAp Advance Feature BEG-->
+#ifndef CONFIG_NO_HOSTAPD_ADVANCE
+int driver_init_max_sta_num(struct i802_bss *bss);
+int hostapd_init_block_list(void *priv);
+#endif
+//<-- Add for SoftAp Advance Feature END
 #endif /* ANDROID */
 
 

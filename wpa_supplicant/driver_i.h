@@ -574,7 +574,7 @@ static inline int wpa_drv_driver_cmd(struct wpa_supplicant *wpa_s,
 {
 	if (!wpa_s->driver->driver_cmd)
 		return -1;
-	return wpa_s->driver->driver_cmd(wpa_s->drv_priv, cmd, buf, buf_len);
+	return wpa_s->driver->driver_cmd(wpa_s->drv_priv, (u8 *)cmd, buf, buf_len);
 }
 #endif /* ANDROID */
 
@@ -713,6 +713,13 @@ static inline int wpa_drv_set_mac_addr(struct wpa_supplicant *wpa_s,
 	return wpa_s->driver->set_mac_addr(wpa_s->drv_priv, addr);
 }
 
+static inline int wpa_drv_set_p2p_mac_addr(struct wpa_supplicant *wpa_s,
+				       const u8 *addr)
+{
+	if (!wpa_s->driver->set_p2p_mac_addr)
+		return -1;
+	return wpa_s->driver->set_p2p_mac_addr(wpa_s->drv_priv, addr);
+}
 
 #ifdef CONFIG_MACSEC
 

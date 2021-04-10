@@ -43,6 +43,8 @@ void wpas_notify_network_request(struct wpa_supplicant *wpa_s,
 				 struct wpa_ssid *ssid,
 				 enum wpa_ctrl_req_type rtype,
 				 const char *default_txt);
+void wpas_notify_offload_roam(struct wpa_supplicant *wpa_s, const char *reason);
+void wpas_notify_wapi_disconnect(struct wpa_supplicant *wpa_s, const char *reason);
 void wpas_notify_scanning(struct wpa_supplicant *wpa_s);
 void wpas_notify_scan_done(struct wpa_supplicant *wpa_s, int success);
 void wpas_notify_scan_results(struct wpa_supplicant *wpa_s);

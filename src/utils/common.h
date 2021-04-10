@@ -345,6 +345,20 @@ static inline void WPA_PUT_LE64(u8 *a, u64 val)
 #define ETH_P_OUI 0x88B7
 #endif /* ETH_P_OUI */
 
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+#ifndef ETH_HLEN
+#define ETH_HLEN 14
+#endif
+#ifndef ETH_P_WAI
+#define ETH_P_WAI 0x88B4
+#endif
+#ifndef ETH_P_WAI_PREAUTH
+#define ETH_P_WAI_PREAUTH 0x88B5
+#endif
+#endif
+//<-- Porting WAPI feature END
+
 
 #ifdef __GNUC__
 #define PRINTF_FORMAT(a,b) __attribute__ ((format (printf, (a), (b))))
@@ -587,5 +601,8 @@ void * __hide_aliasing_typecast(void *foo);
 #else /* CONFIG_VALGRIND */
 #define WPA_MEM_DEFINED(ptr, len) do { } while (0)
 #endif /* CONFIG_VALGRIND */
+
+/* Add for wfa sigma case, and sigma_mode may be needed.*/
+extern int global_sigma_mode;
 
 #endif /* COMMON_H */

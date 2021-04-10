@@ -626,6 +626,13 @@ static int wpa_config_parse_proto(const struct parse_data *data,
 			val |= WPA_PROTO_RSN;
 		else if (os_strcmp(start, "OSEN") == 0)
 			val |= WPA_PROTO_OSEN;
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+		else if (os_strcmp(start, "WAPI") == 0) {
+			val |= WPA_PROTO_WAPI;
+		}
+#endif
+//<-- Porting WAPI feature END
 		else {
 			wpa_printf(MSG_ERROR, "Line %d: invalid proto '%s'",
 				   line, start);
@@ -688,6 +695,18 @@ static char * wpa_config_write_proto(const struct parse_data *data,
 		pos += ret;
 	}
 
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	if (ssid->proto & WPA_PROTO_WAPI) {
+		ret = os_snprintf(pos, end - pos, "%sWAPI",
+				  pos == buf ? "" : " ");
+		if (ret < 0 || ret >= end - pos)
+			return buf;
+		pos += ret;
+	}
+#endif
+//<-- Porting WAPI feature END
+
 	if (pos == buf) {
 		os_free(buf);
 		buf = NULL;
@@ -730,6 +749,14 @@ static int wpa_config_parse_key_mgmt(const struct parse_data *data,
 			val |= WPA_KEY_MGMT_NONE;
 		else if (os_strcmp(start, "WPA-NONE") == 0)
 			val |= WPA_KEY_MGMT_WPA_NONE;
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+		else if (os_strcmp(start, "WAPI-PSK") == 0)
+			val |= WPA_KEY_MGMT_WAPI_PSK;
+		else if (os_strcmp(start, "WAPI-CERT") == 0)
+			val |= WPA_KEY_MGMT_WAPI_CERT;
+#endif
+//<-- Porting WAPI feature END
 #ifdef CONFIG_IEEE80211R
 		else if (os_strcmp(start, "FT-PSK") == 0)
 			val |= WPA_KEY_MGMT_FT_PSK;
@@ -875,6 +902,30 @@ static char * wpa_config_write_key_mgmt(const struct parse_data *data,
 		}
 		pos += ret;
 	}
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	if (ssid->key_mgmt & WPA_KEY_MGMT_WAPI_PSK) {
+		ret = os_snprintf(pos, end - pos, "%sWAPI-PSK",
+				  pos == buf ? "" : " ");
+		if (ret < 0 || ret >= end - pos) {
+			end[-1] = '\0';
+			return buf;
+		}
+		pos += ret;
+	}
+
+	if (ssid->key_mgmt & WPA_KEY_MGMT_WAPI_CERT) {
+		ret = os_snprintf(pos, end - pos, "%sWAPI-CERT",
+				  pos == buf ? "" : " ");
+		if (ret < 0 || ret >= end - pos) {
+			end[-1] = '\0';
+			return buf;
+		}
+		pos += ret;
+	}
+#endif
+//<-- Porting WAPI feature END
 
 #ifdef CONFIG_IEEE80211R
 	if (ssid->key_mgmt & WPA_KEY_MGMT_FT_PSK) {
@@ -2407,6 +2458,13 @@ static const struct parse_data ssid_fields[] = {
 	{ INT_RANGE(owe_group, 0, 65535) },
 	{ INT_RANGE(owe_only, 0, 1) },
 	{ INT_RANGE(multi_ap_backhaul_sta, 0, 1) },
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	{ INT(psk_key_type) },
+	{ STR(wapi_user_cert) },
+	{ STR(wapi_as_cert) },
+#endif
+//<-- Porting WAPI feature END
 };
 
 #undef OFFSET
@@ -2603,6 +2661,12 @@ void wpa_config_free_ssid(struct wpa_ssid *ssid)
 	os_free(ssid->dpp_connector);
 	bin_clear_free(ssid->dpp_netaccesskey, ssid->dpp_netaccesskey_len);
 	os_free(ssid->dpp_csign);
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	os_free(ssid->wapi_as_cert);
+	os_free(ssid->wapi_user_cert);
+#endif
+//<-- Porting WAPI feature END
 	while ((psk = dl_list_first(&ssid->psk_list, struct psk_list_entry,
 				    list))) {
 		dl_list_del(&psk->list);

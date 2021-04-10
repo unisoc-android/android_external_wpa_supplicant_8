@@ -14,8 +14,11 @@
 #include "wpa_ctrl.h"
 #include "wpa_helpers.h"
 
-
+#ifdef ANDROID
+char *wpas_ctrl_path = "@android:wpa_";
+#else
 char *wpas_ctrl_path = "/var/run/wpa_supplicant/";
+#endif
 static int default_timeout = 60;
 
 
@@ -37,13 +40,22 @@ int wpa_command(const char *ifname, const char *cmd)
 	struct wpa_ctrl *ctrl;
 	char buf[128];
 	size_t len;
+	char cmd_buf[128];
 
-	printf("wpa_command(ifname='%s', cmd='%s')\n", ifname, cmd);
+	os_memset(cmd_buf, 0, sizeof(cmd_buf));
+
+#ifdef ANDROID
+	os_snprintf(cmd_buf, sizeof(cmd_buf), "IFNAME=%s %s", ifname, cmd);
+#else
+	os_snprintf(cmd_buf, sizeof(cmd_buf), "%s", cmd);
+#endif
+
+	printf("wpa_command(ifname='%s', cmd='%s')\n", ifname, cmd_buf);
 	ctrl = wpa_open_ctrl(ifname);
 	if (ctrl == NULL)
 		return -1;
 	len = sizeof(buf);
-	if (wpa_ctrl_request(ctrl, cmd, strlen(cmd), buf, &len, NULL) < 0) {
+	if (wpa_ctrl_request(ctrl, cmd_buf, strlen(cmd_buf), buf, &len, NULL) < 0) {
 		printf("wpa_command: wpa_ctrl_request failed\n");
 		wpa_ctrl_close(ctrl);
 		return -1;
@@ -63,13 +75,22 @@ int wpa_command_resp(const char *ifname, const char *cmd,
 {
 	struct wpa_ctrl *ctrl;
 	size_t len;
+	char cmd_buf[128];
 
-	printf("wpa_command(ifname='%s', cmd='%s')\n", ifname, cmd);
+	os_memset(cmd_buf, 0, sizeof(cmd_buf));
+
+#ifdef ANDROID
+	os_snprintf(cmd_buf, sizeof(cmd_buf), "IFNAME=%s %s", ifname, cmd);
+#else
+	os_snprintf(cmd_buf, sizeof(cmd_buf), "%s", cmd);
+#endif
+
+	printf("wpa_command(ifname='%s', cmd='%s')\n", ifname, cmd_buf);
 	ctrl = wpa_open_ctrl(ifname);
 	if (ctrl == NULL)
 		return -1;
 	len = resp_size;
-	if (wpa_ctrl_request(ctrl, cmd, strlen(cmd), resp, &len, NULL) < 0) {
+	if (wpa_ctrl_request(ctrl, cmd_buf, strlen(cmd_buf), resp, &len, NULL) < 0) {
 		printf("wpa_command: wpa_ctrl_request failed\n");
 		wpa_ctrl_close(ctrl);
 		return -1;
@@ -159,21 +180,26 @@ int get_wpa_cli_event(struct wpa_ctrl *mon,
 	return get_wpa_cli_event2(mon, event, NULL, buf, buf_size);
 }
 
+void msg_sigma_cb(char *msg, size_t len)
+{
+	printf("%s: %s\n", __func__, msg);
+}
 
 int get_wpa_status(const char *ifname, const char *field, char *obuf,
 		   size_t obuf_size)
 {
 	struct wpa_ctrl *ctrl;
-	char buf[4096];
+	char buf[4096], cmd[64];
 	char *pos, *end;
-	size_t len, flen;
+	size_t len, flen, clen;
 
 	ctrl = wpa_open_ctrl(ifname);
 	if (ctrl == NULL)
 		return -1;
 	len = sizeof(buf);
-	if (wpa_ctrl_request(ctrl, "STATUS-NO_EVENTS", 16, buf, &len,
-			     NULL) < 0) {
+	clen = snprintf(cmd, sizeof(cmd), "IFNAME=%s STATUS", ifname);
+	printf("%s %d: cmd: %s\n", __func__, __LINE__, cmd);
+	if (wpa_ctrl_request(ctrl, cmd, clen, buf, &len, msg_sigma_cb) < 0) {
 		wpa_ctrl_close(ctrl);
 		return -1;
 	}

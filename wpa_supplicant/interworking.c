@@ -1474,6 +1474,9 @@ static int interworking_set_eap_params(struct wpa_ssid *ssid,
 		os_free(anon);
 	}
 
+#ifdef HS20_WFA_CERTIFICATION
+	if (cred->username && cred->username[0] &&
+#else
 	if (!ttls && cred->username && cred->username[0] && cred->realm &&
 	    !os_strchr(cred->username, '@')) {
 		char *id;
@@ -1492,6 +1495,7 @@ static int interworking_set_eap_params(struct wpa_ssid *ssid,
 		if (res < 0)
 			return -1;
 	} else if (cred->username && cred->username[0] &&
+#endif
 	    wpa_config_set_quoted(ssid, "identity", cred->username) < 0)
 		return -1;
 

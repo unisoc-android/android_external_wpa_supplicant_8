@@ -45,6 +45,10 @@ ifeq ($(BOARD_HOSTAPD_PRIVATE_LIB),)
 L_CFLAGS += -DANDROID_LIB_STUB
 endif
 
+CONFIG_ACS=y
+
+ACS_24GHZ_PREFER_1_6_11=y
+
 # Use Android specific directory for control interface sockets
 L_CFLAGS += -DCONFIG_CTRL_IFACE_CLIENT_DIR=\"/data/vendor/wifi/hostapd/sockets\"
 L_CFLAGS += -DCONFIG_CTRL_IFACE_DIR=\"/data/vendor/wifi/hostapd/ctrl\"
@@ -59,6 +63,7 @@ endif
 
 INCLUDES = $(LOCAL_PATH)
 INCLUDES += $(LOCAL_PATH)/src
+INCLUDES += $(LOCAL_PATH)/src/ap
 INCLUDES += $(LOCAL_PATH)/src/utils
 INCLUDES += system/security/keystore/include
 ifdef CONFIG_DRIVER_NL80211
@@ -1067,6 +1072,10 @@ OBJS += src/ap/acs.c
 LIBS += -lm
 endif
 
+ifdef ACS_24GHZ_PREFER_1_6_11
+L_CFLAGS += -DACS_24GHZ_PREFER_1_6_11
+endif
+
 ifdef CONFIG_NO_STDOUT_DEBUG
 L_CFLAGS += -DCONFIG_NO_STDOUT_DEBUG
 endif
@@ -1116,6 +1125,7 @@ endif
 include $(CLEAR_VARS)
 LOCAL_MODULE := hostapd_cli
 LOCAL_PROPRIETARY_MODULE := true
+LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_SHARED_LIBRARIES := libc libcutils liblog
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_SRC_FILES := $(OBJS_c)
@@ -1145,6 +1155,7 @@ endif
 ifeq ($(HOSTAPD_USE_HIDL), y)
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.0
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.1
+LOCAL_SHARED_LIBRARIES += vendor.sprd.hardware.wifi.hostapd@1.1
 LOCAL_SHARED_LIBRARIES += libbase libhidlbase libhidltransport libhwbinder libutils
 LOCAL_STATIC_LIBRARIES += libhostapd_hidl
 endif
@@ -1187,13 +1198,14 @@ LOCAL_VENDOR_MODULE := true
 LOCAL_CPPFLAGS := $(L_CPPFLAGS)
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_C_INCLUDES := $(INCLUDES)
-HIDL_INTERFACE_VERSION = 1.1
+HIDL_INTERFACE_VERSION =sprd_1.1
 LOCAL_SRC_FILES := \
     hidl/$(HIDL_INTERFACE_VERSION)/hidl.cpp \
-    hidl/$(HIDL_INTERFACE_VERSION)/hostapd.cpp
+    hidl/$(HIDL_INTERFACE_VERSION)/Hostapd.cpp
 LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.hostapd@1.0 \
     android.hardware.wifi.hostapd@1.1 \
+    vendor.sprd.hardware.wifi.hostapd@1.1 \
     libbase \
     libhidlbase \
     libhidltransport \

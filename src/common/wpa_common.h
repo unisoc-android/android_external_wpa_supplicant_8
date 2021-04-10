@@ -72,6 +72,14 @@ WPA_CIPHER_BIP_CMAC_256)
 #define RSN_AUTH_KEY_MGMT_OSEN RSN_SELECTOR(0x50, 0x6f, 0x9a, 0x01)
 #define RSN_AUTH_KEY_MGMT_DPP RSN_SELECTOR(0x50, 0x6f, 0x9a, 0x02)
 
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+#define RSN_AUTH_KEY_MGMT_WAPI_PSK	RSN_SELECTOR(0x00, 0x14, 0x72, 0x02)
+#define RSN_AUTH_KEY_MGMT_WAPI_CERT RSN_SELECTOR(0x00, 0x14, 0x72, 0x01)
+#endif
+//<-- Porting WAPI feature END
+
+
 #define RSN_CIPHER_SUITE_NONE RSN_SELECTOR(0x00, 0x0f, 0xac, 0)
 #define RSN_CIPHER_SUITE_WEP40 RSN_SELECTOR(0x00, 0x0f, 0xac, 1)
 #define RSN_CIPHER_SUITE_TKIP RSN_SELECTOR(0x00, 0x0f, 0xac, 2)
@@ -94,6 +102,9 @@ WPA_CIPHER_BIP_CMAC_256)
 #define RSN_CIPHER_SUITE_CMIC RSN_SELECTOR(0x00, 0x40, 0x96, 2)
 /* KRK is defined for nl80211 use only */
 #define RSN_CIPHER_SUITE_KRK RSN_SELECTOR(0x00, 0x40, 0x96, 255)
+//NOTE: Bug#515092 Add 11r/okc roaming offload develop in supplicant BEG-->
+#define RSN_CIPHER_SUITE_PMK RSN_SELECTOR(0x00, 0x0F, 0xAC,255) /* for set pmk to driver */
+//<-- Add 11r/okc roaming offload develop in supplicant END
 
 /* EAPOL-Key Key Data Encapsulation
  * GroupKey and PeerKey require encryption, otherwise, encryption is optional.
@@ -365,7 +376,8 @@ int fils_key_auth_sk(const u8 *ick, size_t ick_len, const u8 *snonce,
 		     const u8 *g_ap, size_t g_ap_len,
 		     int akmp, u8 *key_auth_sta, u8 *key_auth_ap,
 		     size_t *key_auth_len);
-
+const u8* wpa_get_vendor_ie(const u8 *ies, size_t ie_len,
+				u32 vendor_type);
 #ifdef CONFIG_IEEE80211R
 int wpa_ft_mic(const u8 *kck, size_t kck_len, const u8 *sta_addr,
 	       const u8 *ap_addr, u8 transaction_seqnum,

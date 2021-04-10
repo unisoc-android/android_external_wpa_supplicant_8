@@ -27,7 +27,6 @@
 
 const char *spp_xsd_fname = "spp.xsd";
 
-
 void write_result(struct hs20_osu_client *ctx, const char *fmt, ...)
 {
 	va_list ap;
@@ -600,7 +599,37 @@ int hs20_add_pps_mo(struct hs20_osu_client *ctx, const char *uri,
 		return -1;
 	}
 
-	mkdir("SP", S_IRWXU);
+	if (mkdir("SP", S_IRWXU) < 0) {
+		if (errno != EEXIST) {
+			/* note:
+			 * the mkdir operation is running under / root dir actually;
+			 * DUT should make sure the / dir has permission for mkdir.
+			 * mount -o rw,remount / should be done to obtain
+			 * rw permission under / if mkdir SP failed
+			 */
+			int err = errno;
+			wpa_printf(MSG_INFO, "mkdir SP/ failed: %s",
+				   strerror(err));
+			free(fqdn);
+			return -1;
+		}
+	}
+#ifdef ANDROID
+	/* Allow processes running with Group ID as AID_WIFI,
+	 * to read files from SP/<fqdn> directory */
+	if (chown("SP", -1, AID_WIFI)) {
+		wpa_printf(MSG_INFO, "CTRL: Could not chown directory: %s",
+			strerror(errno));
+		/* Try to continue anyway */
+	}
+	if (chmod("SP", S_IRWXU | S_IRGRP | S_IXGRP) < 0) {
+		wpa_printf(MSG_INFO, "CTRL: Could not chmod directory: %s",
+			strerror(errno));
+		/* Try to continue anyway */
+	}
+#endif /* ANDROID */
+
+
 	snprintf(fname, fname_len, "SP/%s", fqdn);
 	if (mkdir(fname, S_IRWXU) < 0) {
 		if (errno != EEXIST) {
@@ -1590,9 +1619,14 @@ static void set_pps_cred_digital_cert(struct hs20_osu_client *ctx, int id,
 	char buf[200], dir[200];
 
 	wpa_printf(MSG_INFO, "- Credential/DigitalCertificate");
-
+#ifdef HS20_WFA_CERTIFICATION
+	//os_strlcpy(dir, "/data/misc/wifi/", 16);
+	os_strlcpy(dir, "/", 1);
+#else
 	if (getcwd(dir, sizeof(dir)) == NULL)
 		return;
+#endif
+
 
 	/* TODO: could build username from Subject of Subject AltName */
 	if (set_cred_quoted(ctx->ifname, id, "username", "cert") < 0) {
@@ -1604,6 +1638,21 @@ static void set_pps_cred_digital_cert(struct hs20_osu_client *ctx, int id,
 		if (set_cred_quoted(ctx->ifname, id, "client_cert", buf) < 0) {
 			wpa_printf(MSG_INFO, "Failed to set client_cert");
 		}
+#ifdef ANDROID
+		/* Allow processes running with Group ID as AID_WIFI,
+		 * to read files from SP/<fqdn> directory */
+		if (chown(buf, -1, AID_WIFI)) {
+			wpa_printf(MSG_INFO, "CTRL: Could not chown directory: %s : %s",
+				buf,
+				strerror(errno));
+			/* Try to continue anyway */
+		}
+		if (chmod(buf, S_IRWXU | S_IRGRP | S_IXGRP) < 0) {
+			wpa_printf(MSG_INFO, "CTRL: Could not chmod directory: %s",
+				strerror(errno));
+			/* Try to continue anyway */
+		}
+#endif /* ANDROID */
 	}
 
 	snprintf(buf, sizeof(buf), "%s/SP/%s/client-key.pem", dir, fqdn);
@@ -1611,6 +1660,21 @@ static void set_pps_cred_digital_cert(struct hs20_osu_client *ctx, int id,
 		if (set_cred_quoted(ctx->ifname, id, "private_key", buf) < 0) {
 			wpa_printf(MSG_INFO, "Failed to set private_key");
 		}
+#ifdef ANDROID
+		/* Allow processes running with Group ID as AID_WIFI,
+		 * to read files from SP/<fqdn> directory */
+		if (chown(buf, -1, AID_WIFI)) {
+			wpa_printf(MSG_INFO, "CTRL: Could not chown directory: %s : %s",
+				buf,
+				strerror(errno));
+			/* Try to continue anyway */
+		}
+		if (chmod(buf, S_IRWXU | S_IRGRP | S_IXGRP) < 0) {
+			wpa_printf(MSG_INFO, "CTRL: Could not chmod directory: %s",
+				strerror(errno));
+			/* Try to continue anyway */
+		}
+#endif /* ANDROID */
 	}
 }
 
@@ -1631,14 +1695,34 @@ static void set_pps_cred_realm(struct hs20_osu_client *ctx, int id,
 
 	if (sim)
 		return;
-
+#ifdef HS20_WFA_CERTIFICATION
+	//os_strlcpy(dir, "/data/misc/wifi/", 16);
+	os_strlcpy(dir, "/", 1);
+#else
 	if (getcwd(dir, sizeof(dir)) == NULL)
 		return;
+#endif
+
 	snprintf(buf, sizeof(buf), "%s/SP/%s/aaa-ca.pem", dir, fqdn);
 	if (os_file_exists(buf)) {
 		if (set_cred_quoted(ctx->ifname, id, "ca_cert", buf) < 0) {
 			wpa_printf(MSG_INFO, "Failed to set CA cert");
 		}
+#ifdef ANDROID
+		/* Allow processes running with Group ID as AID_WIFI,
+		 * to read files from SP/<fqdn> directory */
+		if (chown(buf, -1, AID_WIFI)) {
+			wpa_printf(MSG_INFO, "CTRL: Could not chown directory: %s : %s",
+				buf,
+				strerror(errno));
+			/* Try to continue anyway */
+		}
+		if (chmod(buf, S_IRWXU | S_IRGRP | S_IXGRP) < 0) {
+			wpa_printf(MSG_INFO, "CTRL: Could not chmod directory: %s",
+				strerror(errno));
+			/* Try to continue anyway */
+		}
+#endif /* ANDROID */
 	}
 }
 
@@ -2181,8 +2265,13 @@ static int osu_connect(struct hs20_osu_client *ctx, const char *bssid,
 		osu_nai = osu_nai2;
 	if (osu_nai && os_strlen(osu_nai) > 0) {
 		char dir[255], fname[300];
+#ifdef HS20_WFA_CERTIFICATION
+		os_strlcpy(dir, "/data/misc/wifi/", 16);
+#else
 		if (getcwd(dir, sizeof(dir)) == NULL)
 			return -1;
+#endif
+
 		os_snprintf(fname, sizeof(fname), "%s/osu-ca.pem", dir);
 
 		if (ssid2 && set_network_quoted(ifname, id, "ssid", ssid2) < 0)
@@ -2278,7 +2367,7 @@ static int cmd_osu_select(struct hs20_osu_client *ctx, const char *dir,
 			  int connect, int no_prod_assoc,
 			  const char *friendly_name)
 {
-	char fname[255];
+	char fname[255], icon_copy[255];
 	FILE *f;
 	struct osu_data *osu = NULL, *last = NULL;
 	size_t osu_count = 0, i, j;
@@ -2327,8 +2416,11 @@ static int cmd_osu_select(struct hs20_osu_client *ctx, const char *dir,
 		ret = i + 1;
 		goto selected;
 	}
-
+#ifdef HS20_WFA_CERTIFICATION
+	snprintf(fname, sizeof(fname), "%s/osu-providers.html", "/mnt/sdcard");
+#else
 	snprintf(fname, sizeof(fname), "%s/osu-providers.html", dir);
+#endif
 	f = fopen(fname, "w");
 	if (f == NULL) {
 		wpa_printf(MSG_INFO, "Could not open %s", fname);
@@ -2360,6 +2452,16 @@ static int cmd_osu_select(struct hs20_osu_client *ctx, const char *dir,
 				last->icon[j].id,
 				strcasecmp(last->icon[j].mime_type,
 					   "image/png") == 0 ? "png" : "icon");
+#ifdef HS20_WFA_CERTIFICATION
+			/* copy osu-icon-*.png to /mnt/sdcard to avoid permission issue for browser */
+			snprintf(icon_copy, sizeof(icon_copy),
+				"cp /data/misc/wifi/osu-info/osu-icon-%d.%s /mnt/sdcard/",
+				last->icon[j].id,
+				strcasecmp(last->icon[j].mime_type,
+					   "image/png") == 0 ? "png" : "icon");
+			wpa_printf(MSG_INFO, "icon-copy: cmd: %s", icon_copy);
+			system(icon_copy);
+#endif
 		}
 		fprintf(f, "<td>");
 		for (j = 0; j < last->friendly_name_count; j++) {
@@ -2394,7 +2496,12 @@ static int cmd_osu_select(struct hs20_osu_client *ctx, const char *dir,
 
 	fclose(f);
 
+#ifdef HS20_WFA_CERTIFICATION
+	snprintf(fname, sizeof(fname), "file://%s/osu-providers.html", "/mnt/sdcard");
+#else
 	snprintf(fname, sizeof(fname), "file://%s/osu-providers.html", dir);
+#endif
+
 	write_summary(ctx, "Start web browser with OSU provider selection page");
 	ret = hs20_web_browser(fname);
 
@@ -2446,7 +2553,11 @@ selected:
 			if (data) {
 				sha256_vector(1, (const u8 **) &data, &data_len,
 					      ctx->icon_hash[j]);
+#ifdef HS20_WFA_CERTIFICATION
+			/*we found that, icon_hash will be flush when do certification, which will result to certification fail*/
+#else
 				os_free(data);
+#endif
 			}
 		}
 
@@ -2491,8 +2602,12 @@ static int cmd_signup(struct hs20_osu_client *ctx, int no_prod_assoc,
 
 	ifname = ctx->ifname;
 
+#ifdef HS20_WFA_CERTIFICATION
+	os_strlcpy(dir, "/data/misc/wifi/", 16);
+#else
 	if (getcwd(dir, sizeof(dir)) == NULL)
 		return -1;
+#endif
 
 	snprintf(fname, sizeof(fname), "%s/osu-info", dir);
 	if (mkdir(fname, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) < 0 &&
@@ -3067,7 +3182,11 @@ static int init_ctx(struct hs20_osu_client *ctx)
 	if (ctx->xml == NULL)
 		return -1;
 
+#ifdef HS20_WFA_CERTIFICATION
+	devinfo = node_from_file(ctx->xml, "/data/misc/wifi/devinfo.xml");
+#else
 	devinfo = node_from_file(ctx->xml, "devinfo.xml");
+#endif
 	if (devinfo) {
 		devid = get_node(ctx->xml, devinfo, "DevId");
 		if (devid) {

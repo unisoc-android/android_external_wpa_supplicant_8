@@ -8,6 +8,7 @@
 
 #include "includes.h"
 #define LIBXML_VALID_ENABLED
+#define ANDROID_LINK_SHARED_ICU4C 
 #include <libxml/tree.h>
 #include <libxml/xmlschemastypes.h>
 

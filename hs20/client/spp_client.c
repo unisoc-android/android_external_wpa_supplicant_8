@@ -61,7 +61,12 @@ static int hs20_spp_validate(struct hs20_osu_client *ctx, xml_node_t *node,
 		return -1;
 	}
 
+#ifdef HS20_WFA_CERTIFICATION
+	ret = xml_validate(xctx, node, "/data/misc/wifi/spp.xsd", &err);
+#else
 	ret = xml_validate(xctx, node, spp_xsd_fname, &err);
+#endif
+
 	if (ret < 0) {
 		wpa_printf(MSG_INFO, "XML schema validation error(s)\n%s", err);
 		write_summary(ctx, "SPP XML schema validation failed");
@@ -135,10 +140,15 @@ static xml_node_t * build_spp_post_dev_data(struct hs20_osu_client *ctx,
 			     URN_HS20_PPS " " URN_OMA_DM_DEVINFO " "
 			     URN_OMA_DM_DEVDETAIL " " URN_HS20_DEVDETAIL_EXT);
 
+#ifdef HS20_WFA_CERTIFICATION
+	add_mo_container(ctx->xml, ns, spp_node, URN_OMA_DM_DEVINFO, "/data/misc/wifi/devinfo.xml");
+	add_mo_container(ctx->xml, ns, spp_node, URN_OMA_DM_DEVDETAIL, "/data/misc/wifi/devdetail.xml");
+#else
 	add_mo_container(ctx->xml, ns, spp_node, URN_OMA_DM_DEVINFO,
 			 "devinfo.xml");
 	add_mo_container(ctx->xml, ns, spp_node, URN_OMA_DM_DEVDETAIL,
 			 "devdetail.xml");
+#endif
 
 	return spp_node;
 }

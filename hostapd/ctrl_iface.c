@@ -74,6 +74,8 @@ static unsigned char gcookie[COOKIE_LEN];
 #define HOSTAPD_GLOBAL_CTRL_IFACE_PORT_LIMIT	50
 #endif /* CONFIG_CTRL_IFACE_UDP */
 
+int returnChannelToFw(int temp[],char *reply,int count);
+
 static void hostapd_ctrl_iface_send(struct hostapd_data *hapd, int level,
 				    enum wpa_msg_type type,
 				    const char *buf, size_t len);
@@ -153,7 +155,7 @@ static int hostapd_ctrl_iface_sa_query(struct hostapd_data *hapd,
 
 
 #ifdef CONFIG_WPS
-static int hostapd_ctrl_iface_wps_pin(struct hostapd_data *hapd, char *txt)
+int hostapd_ctrl_iface_wps_pin(struct hostapd_data *hapd, char *txt)
 {
 	char *pin = os_strchr(txt, ' ');
 	char *timeout_txt;
@@ -181,8 +183,23 @@ static int hostapd_ctrl_iface_wps_pin(struct hostapd_data *hapd, char *txt)
 	return hostapd_wps_add_pin(hapd, addr, txt, pin, timeout);
 }
 
+int returnChannelToFw(int temp[],char *reply,int count) {
+	char *tempHead;
+	tempHead = reply;
+	int allStringCount = 0;
+	for (int i = 0; i< count; i++) {
+		wpa_printf(MSG_DEBUG, "list channel %d",temp[i]);
+		sprintf(reply, "%d,", temp[i]);
+		wpa_printf(MSG_DEBUG, "reply save channel %s",reply);
+		reply = (reply + strlen(reply));
+	}
+	reply = tempHead;
+	allStringCount = strlen(reply);
+	wpa_printf(MSG_DEBUG, "allStringCount = %d, reply = %s", allStringCount, reply);
+	return allStringCount;
+}
 
-static int hostapd_ctrl_iface_wps_check_pin(
+int hostapd_ctrl_iface_wps_check_pin(
 	struct hostapd_data *hapd, char *cmd, char *buf, size_t buflen)
 {
 	char pin[9];
@@ -3342,6 +3359,22 @@ static int hostapd_ctrl_iface_receive_process(struct hostapd_data *hapd,
 		if (hostapd_dpp_pkex_remove(hapd, buf + 16) < 0)
 			reply_len = -1;
 #endif /* CONFIG_DPP */
+//NOTE: Bug#692685 Add for SoftAp Advance Feature BEG-->
+#ifndef CONFIG_NO_HOSTAPD_ADVANCE
+		} else if (os_strncmp(buf, "IFNAME=", 7) == 0) {
+			buf = os_strchr(buf + 7, ' ');
+			if (buf) {
+				*buf++ = '\0';
+			}
+			if (os_strncmp(buf, "DRIVER ", 7) == 0) {
+				if (!hapd->driver->driver_cmd)
+					reply_len = -1;
+				else
+					reply_len = hapd->driver->driver_cmd(hapd->drv_priv, (unsigned char *)(buf + 7), reply, reply_size);
+			}
+#endif
+//<-- Add for SoftAp Advance Feature END
+
 #ifdef RADIUS_SERVER
 	} else if (os_strncmp(buf, "DAC_REQUEST ", 12) == 0) {
 		if (radius_server_dac_request(hapd->radius_srv, buf + 12) < 0)

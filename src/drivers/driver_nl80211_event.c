@@ -19,6 +19,9 @@
 #include "common/ieee802_11_common.h"
 #include "driver_nl80211.h"
 
+//NOTE: Bug #535975 Marlin2 WMMAC Development BEG-->
+int wmm_parse_qosinfo(const u8 *buf, size_t len, u8 *qosinfo);
+//<--  Marlin2 WMMAC Development END
 
 static const char * nl80211_command_to_string(enum nl80211_commands cmd)
 {
@@ -285,7 +288,6 @@ static void mlme_event_assoc(struct wpa_driver_nl80211_data *drv,
 	wpa_supplicant_event(drv->ctx, EVENT_ASSOC, &event);
 }
 
-
 static void mlme_event_connect(struct wpa_driver_nl80211_data *drv,
 			       enum nl80211_commands cmd, struct nlattr *status,
 			       struct nlattr *addr, struct nlattr *req_ie,
@@ -388,7 +390,14 @@ static void mlme_event_connect(struct wpa_driver_nl80211_data *drv,
 	if (req_ie) {
 		event.assoc_info.req_ies = nla_data(req_ie);
 		event.assoc_info.req_ies_len = nla_len(req_ie);
-
+		//NOTE: Bug #535975 Marlin2 WMMAC Development BEG-->
+		if (wmm_parse_qosinfo(event.assoc_info.req_ies,
+					event.assoc_info.req_ies_len,
+					&(event.assoc_info.wmm_params.uapsd_queues))) {
+			event.assoc_info.wmm_params.info_bitmap |=
+				WMM_PARAMS_UAPSD_QUEUES_INFO;
+		}
+		//<--  Marlin2 WMMAC Development END
 		if (cmd == NL80211_CMD_ROAM) {
 			ssid = get_ie(event.assoc_info.req_ies,
 				      event.assoc_info.req_ies_len,
@@ -1708,6 +1717,16 @@ static enum hostapd_hw_mode get_qca_hw_mode(u8 hw_mode)
 }
 
 
+static void sprd_nl80211_hp_soft_reset(struct wpa_driver_nl80211_data *drv,
+				   const u8 *data, size_t len)
+{
+	wpa_printf(MSG_INFO,
+		   "nl80211: SPRD hotspot soft reset event received");
+
+	wpa_supplicant_event(drv->ctx, EVENT_SPRD_SOFT_RESET, NULL);
+}
+
+
 static void qca_nl80211_acs_select_ch(struct wpa_driver_nl80211_data *drv,
 				   const u8 *data, size_t len)
 {
@@ -2054,6 +2073,10 @@ static void nl80211_vendor_event_qca(struct wpa_driver_nl80211_data *drv,
 	switch (subcmd) {
 	case QCA_NL80211_VENDOR_SUBCMD_TEST:
 		wpa_hexdump(MSG_DEBUG, "nl80211: QCA test event", data, len);
+		break;
+	case QCA_NL80211_VENDOR_SUBCMD_DO_ACS - 1:
+		wpa_printf(MSG_INFO, "nl80211: SPRD softap soft reset ");
+		sprd_nl80211_hp_soft_reset(drv, data, len);
 		break;
 #ifdef CONFIG_DRIVER_NL80211_QCA
 	case QCA_NL80211_VENDOR_SUBCMD_AVOID_FREQUENCY:
@@ -2682,3 +2705,41 @@ int process_bss_event(struct nl_msg *msg, void *arg)
 
 	return NL_SKIP;
 }
+
+//=============================================================================
+// add by sprd start
+//=============================================================================
+
+//NOTE: Bug #535975 Marlin2 WMMAC Development BEG-->
+/*
+ * wmm_parse_qosinfo - Parse qosinfo from ies
+ * @buf: Pointer to the ies buffer
+ * @len: ies total len
+ * @qosinfo: Pointer to the qosinfo
+ * Returns: find
+ */
+int wmm_parse_qosinfo(const u8 *buf, size_t len, u8 *qosinfo)
+{
+	const u8 *pos, *end;
+	int find = 0;
+
+	for (pos = buf, end = pos + len; pos + 1 < end; pos += 2 + pos[1]) {
+		if (pos + 2 + pos[1] > end) {
+			wpa_printf(MSG_DEBUG,
+					"nl80211: WMM IE data underflow (ie=%d len=%d pos=%d)",
+					pos[0], pos[1], (int) (pos - buf));
+			break;
+		}
+		if (*pos == WLAN_EID_VENDOR_SPECIFIC && pos[1] >= 7) {
+			if (WPA_GET_BE32(&pos[2]) == WMM_IE_VENDOR_TYPE) {
+				*qosinfo = pos[8] & WMM_QOSINFO_STA_AC_MASK;
+				find = 1;
+				wpa_printf(MSG_DEBUG,"nl80211: QOS info (0x%x) is found\n",
+						*qosinfo);
+				break;
+			}
+		}
+	}
+	return find;
+}
+//<--  Marlin2 WMMAC Development END

@@ -968,6 +968,12 @@ static unsigned int get_akm_suites_info(struct nlattr *tb)
 	unsigned int key_mgmt = 0;
 	u32 *akms;
 
+	/* WPA_EAP & WPA_PSK is enabled by default */
+	key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_WPA |
+			WPA_DRIVER_CAPA_KEY_MGMT_WPA2;
+	key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_WPA_PSK |
+			WPA_DRIVER_CAPA_KEY_MGMT_WPA2_PSK;
+
 	if (!tb)
 		return 0;
 
@@ -976,19 +982,11 @@ static unsigned int get_akm_suites_info(struct nlattr *tb)
 	for (i = 0; i < num; i++) {
 		u32 a = akms[i];
 
-		wpa_printf(MSG_DEBUG,
-			   "nl80211: Supported AKM %02x-%02x-%02x:%u",
+		wpa_printf(MSG_INFO,
+			   "nl80211: SPRD Supported AKM %02x-%02x-%02x:%u",
 			   a >> 24, (a >> 16) & 0xff,
 			   (a >> 8) & 0xff, a & 0xff);
 		switch (a) {
-		case RSN_AUTH_KEY_MGMT_UNSPEC_802_1X:
-			key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_WPA |
-				WPA_DRIVER_CAPA_KEY_MGMT_WPA2;
-			break;
-		case RSN_AUTH_KEY_MGMT_PSK_OVER_802_1X:
-			key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_WPA_PSK |
-				WPA_DRIVER_CAPA_KEY_MGMT_WPA2_PSK;
-			break;
 		case RSN_AUTH_KEY_MGMT_FT_802_1X:
 			key_mgmt |= WPA_DRIVER_CAPA_KEY_MGMT_FT;
 			break;
@@ -1073,7 +1071,7 @@ static int qca_nl80211_get_akm_suites(struct wpa_driver_nl80211_data *drv)
 	ret = send_and_recv_msgs(drv, msg, get_akm_suites_handler, &key_mgmt);
 	if (!ret) {
 		wpa_printf(MSG_DEBUG,
-			   "nl80211: Replace capa.key_mgmt based on driver advertised capabilities: 0x%x",
+			   "nl80211: SPRD Replace capa.key_mgmt based on driver advertised capabilities: 0x%x",
 			   key_mgmt);
 		drv->capa.key_mgmt = key_mgmt;
 	}

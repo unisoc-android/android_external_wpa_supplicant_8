@@ -28,6 +28,14 @@
 #define WNM_MAX_NEIGHBOR_REPORT 10
 
 #define WNM_SCAN_RESULT_AGE 2 /* 2 seconds */
+//NOTE: Bug#519201 Add Marlin2 802.11v develop in supplicant BEG-->
+static void ieee802_11_rx_wnmtfs_resp(struct wpa_supplicant *wpa_s,
+					const u8 *frm, int len);
+
+static void ieee802_11_rx_wnmdms_resp(struct wpa_supplicant *wpa_s,
+					const u8 *frm, int len);
+//<-- Add Marlin2 802.11v develop in supplicant END
+
 
 /* get the TFS IE from driver */
 static int ieee80211_11_get_tfs_ie(struct wpa_supplicant *wpa_s, u8 *buf,
@@ -1875,6 +1883,14 @@ void ieee802_11_rx_wnm_action(struct wpa_supplicant *wpa_s,
 	case WNM_NOTIFICATION_REQ:
 		ieee802_11_rx_wnm_notif_req(wpa_s, mgmt->sa, pos, end - pos);
 		break;
+	//NOTE: Bug#519201 Add Marlin2 802.11v develop in supplicant BEG-->
+	case WNM_TFS_RESP:
+		ieee802_11_rx_wnmtfs_resp(wpa_s, pos, end - pos);
+		break;
+	case WNM_DMS_RESP:
+		ieee802_11_rx_wnmdms_resp(wpa_s, pos, end - pos);
+		break;
+	//<-- Add Marlin2 802.11v develop in supplicant END
 	case WNM_COLLOCATED_INTERFERENCE_REQ:
 		ieee802_11_rx_wnm_coloc_intf_req(wpa_s, mgmt->sa, pos,
 						 end - pos);
@@ -1885,6 +1901,160 @@ void ieee802_11_rx_wnm_action(struct wpa_supplicant *wpa_s,
 	}
 }
 
+//=============================================================================
+// add by sprd start
+//=============================================================================
+
+//NOTE: Bug#519201 Add Marlin2 802.11v develop in supplicant BEG-->
+static void ieee802_11_rx_wnmtfs_resp(struct wpa_supplicant *wpa_s,
+					const u8 *frm, int len)
+{
+	/*
+	 * Action [1] | Dialog Token [1] |TFS Response IE
+	 */
+	u8 *pos = (u8 *) frm; /* point to payload after the action field */
+
+	wpa_printf(MSG_DEBUG, "WNM TFS Response action=%u token=%u", frm[0], frm[1]);
+
+	wpa_hexdump(MSG_DEBUG, "WNM TFS Response: Element", pos, len);
+	/*TBD*/
+	return;
+
+}
+
+
+static void ieee802_11_rx_wnmdms_resp(struct wpa_supplicant *wpa_s,
+					const u8 *frm, int len)
+{
+	/*
+	 * Action [1] | Dialog Token [1] |DMS Response IE
+	 */
+	u8 *pos = (u8 *) frm; /* point to payload after the action field */
+
+	wpa_printf(MSG_DEBUG, "WNM DMS Response action=%u token=%u", frm[0], frm[1]);
+
+	wpa_hexdump(MSG_DEBUG, "WNM DMS Response: Element", pos, len);
+	/*TBD*/
+	return;
+
+}
+
+
+/* MLME-TFS.request */
+int ieee802_11_send_wnmtfs_req(struct wpa_supplicant *wpa_s, struct wpabuf *tfs_req)
+{
+	struct ieee80211_mgmt *mgmt;
+	int res = -1;
+	size_t len;
+	u8 *wnmtfs_ie;
+	u16 wnmtfs_ie_len;  /* possibly multiple IE(s) */
+
+	/* TFS IE(s) */
+	wnmtfs_ie_len = wpabuf_len(tfs_req);
+	wnmtfs_ie = os_malloc(wnmtfs_ie_len);
+	if (wnmtfs_ie == NULL) {
+		return -1;
+	}
+
+	os_memcpy(wnmtfs_ie, wpabuf_head(tfs_req), wnmtfs_ie_len);
+
+	wpa_hexdump(MSG_DEBUG, "WNM: TFS Request element",
+		    (u8 *) wnmtfs_ie, wnmtfs_ie_len);
+
+	mgmt = os_zalloc(sizeof(*mgmt) + wnmtfs_ie_len);
+	if (mgmt == NULL) {
+		wpa_printf(MSG_DEBUG, "MLME: Failed to allocate buffer for "
+			   "WNM TFS Request action frame");
+		os_free(wnmtfs_ie);
+		return -1;
+	}
+
+	os_memcpy(mgmt->da, wpa_s->bssid, ETH_ALEN);
+	os_memcpy(mgmt->sa, wpa_s->own_addr, ETH_ALEN);
+	os_memcpy(mgmt->bssid, wpa_s->bssid, ETH_ALEN);
+	mgmt->frame_control = IEEE80211_FC(WLAN_FC_TYPE_MGMT,
+					   WLAN_FC_STYPE_ACTION);
+	mgmt->u.action.category = WLAN_ACTION_WNM;
+	mgmt->u.action.u.wnm_tfs_req.action = WNM_TFS_REQ;
+	mgmt->u.action.u.wnm_tfs_req.dialogtoken = 1;
+	mgmt->u.action.u.wnm_tfs_req.eid = WLAN_EID_TFS_REQ;
+	mgmt->u.action.u.wnm_tfs_req.len = wnmtfs_ie_len;
+	/* copy TFS IE here */
+	os_memcpy(mgmt->u.action.u.wnm_tfs_req.variable, wnmtfs_ie,
+		  wnmtfs_ie_len);
+
+	len = 1 + sizeof(mgmt->u.action.u.wnm_tfs_req) + wnmtfs_ie_len;
+
+	res = wpa_drv_send_action(wpa_s, wpa_s->assoc_freq, 0, wpa_s->bssid,
+				  wpa_s->own_addr, wpa_s->bssid,
+				  &mgmt->u.action.category, len, 0);
+	if (res < 0)
+		wpa_printf(MSG_DEBUG, "Failed to send WNM-TFS Request ");
+
+	os_free(wnmtfs_ie);
+	os_free(mgmt);
+
+	return res;
+}
+
+
+/* MLME-DMS.request */
+int ieee802_11_send_wnmdms_req(struct wpa_supplicant *wpa_s, struct wpabuf *dms_req)
+{
+	struct ieee80211_mgmt *mgmt;
+	int res = -1;
+	size_t len;
+	u8 *wnmdms_ie;
+	u16 wnmdms_ie_len;  /* possibly multiple IE(s) */
+
+	/* TFS IE(s) */
+	wnmdms_ie_len = wpabuf_len(dms_req);
+	wnmdms_ie = os_malloc(wnmdms_ie_len);
+	if (wnmdms_ie == NULL) {
+		return -1;
+	}
+
+	os_memcpy(wnmdms_ie, wpabuf_head(dms_req), wnmdms_ie_len);
+
+	wpa_hexdump(MSG_DEBUG, "WNM: DMS Request element",
+		    (u8 *) wnmdms_ie, wnmdms_ie_len);
+
+	mgmt = os_zalloc(sizeof(*mgmt) + wnmdms_ie_len);
+	if (mgmt == NULL) {
+		wpa_printf(MSG_DEBUG, "MLME: Failed to allocate buffer for "
+			   "WNM DMS Request action frame");
+		os_free(wnmdms_ie);
+		return -1;
+	}
+
+	os_memcpy(mgmt->da, wpa_s->bssid, ETH_ALEN);
+	os_memcpy(mgmt->sa, wpa_s->own_addr, ETH_ALEN);
+	os_memcpy(mgmt->bssid, wpa_s->bssid, ETH_ALEN);
+	mgmt->frame_control = IEEE80211_FC(WLAN_FC_TYPE_MGMT,
+					   WLAN_FC_STYPE_ACTION);
+	mgmt->u.action.category = WLAN_ACTION_WNM;
+	mgmt->u.action.u.wnm_dms_req.action = WNM_DMS_REQ;
+	mgmt->u.action.u.wnm_dms_req.dialogtoken = 1;
+	mgmt->u.action.u.wnm_dms_req.eid = WLAN_EID_DMS_REQUEST;
+	mgmt->u.action.u.wnm_dms_req.len = wnmdms_ie_len;
+	/* copy DMS IE here */
+	os_memcpy(mgmt->u.action.u.wnm_dms_req.variable, wnmdms_ie,
+		  wnmdms_ie_len);
+
+	len = 1 + sizeof(mgmt->u.action.u.wnm_dms_req) + wnmdms_ie_len;
+
+	res = wpa_drv_send_action(wpa_s, wpa_s->assoc_freq, 0, wpa_s->bssid,
+				  wpa_s->own_addr, wpa_s->bssid,
+				  &mgmt->u.action.category, len, 0);
+	if (res < 0)
+		wpa_printf(MSG_DEBUG, "Failed to send WNM-DMS Request ");
+
+	os_free(wnmdms_ie);
+	os_free(mgmt);
+
+	return res;
+}
+//<-- Add Marlin2 802.11v develop in supplicant END
 
 int wnm_send_coloc_intf_report(struct wpa_supplicant *wpa_s, u8 dialog_token,
 			       const struct wpabuf *elems)

@@ -274,6 +274,16 @@ struct wpa_ssid {
 	 * ap_scan=2.
 	 */
 	int scan_ssid;
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+/* note: suggest that: put wapi setting in no-macro code
+ * as libwapi.so will access wpa_ssid memory to avoid memory offset mismatch
+ */
+#ifdef CONFIG_WAPI
+	int psk_key_type;
+	char *wapi_as_cert;
+	char *wapi_user_cert;
+#endif
+//<-- Porting WAPI feature END
 
 #ifdef IEEE8021X_EAPOL
 #define EAPOL_FLAG_REQUIRE_KEY_UNICAST BIT(0)

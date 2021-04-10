@@ -1653,7 +1653,9 @@ static int wpa_driver_nl80211_set_country(void *priv, const char *alpha2_arg)
 	alpha2[2] = '\0';
 
 	if (!nl80211_cmd(drv, msg, 0, NL80211_CMD_REQ_SET_REG) ||
-	    nla_put_string(msg, NL80211_ATTR_REG_ALPHA2, alpha2)) {
+	    nla_put_string(msg, NL80211_ATTR_REG_ALPHA2, alpha2) ||
+	    nla_put_u32(msg, NL80211_ATTR_USER_REG_HINT_TYPE,
+	                     NL80211_USER_REG_HINT_CELL_BASE)) {
 		nlmsg_free(msg);
 		return -EINVAL;
 	}
@@ -2031,6 +2033,14 @@ static void * wpa_driver_nl80211_drv_init(void *ctx, const char *ifname,
 
 	if (nl80211_init_bss(bss))
 		goto failed;
+
+//NOTE: Bug#692685 Add for SoftAp Advance Feature BEG-->
+#ifndef CONFIG_NO_HOSTAPD_ADVANCE  //new feature: set max sta num to cp2
+	if(hostapd){
+		driver_init_max_sta_num(bss);
+	}
+#endif
+//<-- Add for SoftAp Advance Feature END
 
 	if (wpa_driver_nl80211_finish_drv_init(drv, set_addr, 1, driver_params))
 		goto failed;
@@ -2470,6 +2480,12 @@ static int nl80211_mgmt_subscribe_ap_dev_sme(struct i802_bss *bss)
 	if (nl80211_action_subscribe_ap(bss))
 		goto out_err;
 
+#if 0
+	/*
+	 * SPRD WLAN solutions offload auth & assoc to CP2 Wi-Fi firmware.
+	 * Dose not register AUTH frame to CP2, otherwise will makes AP(GO)
+	 * function not work
+	 */
 	if (bss->drv->device_ap_sme) {
 		u16 type = (WLAN_FC_TYPE_MGMT << 2) | (WLAN_FC_STYPE_AUTH << 4);
 
@@ -2479,6 +2495,7 @@ static int nl80211_mgmt_subscribe_ap_dev_sme(struct i802_bss *bss)
 			wpa_printf(MSG_DEBUG,
 				   "nl80211: Failed to subscribe to handle Authentication frames - SAE offload may not work");
 	}
+#endif
 
 	nl80211_mgmt_handle_register_eloop(bss);
 	return 0;
@@ -2880,8 +2897,13 @@ static u32 wpa_alg_to_cipher_suite(enum wpa_alg alg, size_t key_len)
 		return RSN_CIPHER_SUITE_SMS4;
 	case WPA_ALG_KRK:
 		return RSN_CIPHER_SUITE_KRK;
-	case WPA_ALG_NONE:
+	//NOTE: Bug#515092 Add 11r/okc roaming offload develop in supplicant BEG-->
+	//case WPA_ALG_NONE:
+	//case WPA_ALG_PMK:
 	case WPA_ALG_PMK:
+		return RSN_CIPHER_SUITE_PMK;
+	case WPA_ALG_NONE:
+	//<-- Add 11r/okc roaming offload develop in supplicant END
 		wpa_printf(MSG_ERROR, "nl80211: Unexpected encryption algorithm %d",
 			   alg);
 		return 0;
@@ -2912,6 +2934,12 @@ static u32 wpa_cipher_to_cipher_suite(unsigned int cipher)
 		return RSN_CIPHER_SUITE_WEP40;
 	case WPA_CIPHER_GTK_NOT_USED:
 		return RSN_CIPHER_SUITE_NO_GROUP_ADDRESSED;
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	case WPA_CIPHER_SMS4:
+		return RSN_CIPHER_SUITE_SMS4;
+#endif
+//<-- Porting WAPI feature END
 	}
 
 	return 0;
@@ -4048,6 +4076,11 @@ static int nl80211_set_multicast_to_unicast(struct i802_bss *bss,
 	return ret;
 }
 
+//NOTE: Bug#692685 Add for SoftAp Advance Feature BEG-->
+#ifndef CONFIG_NO_HOSTAPD_ADVANCE
+	int hostapd_init_block_list(void *priv);
+#endif
+//<-- Add for SoftAp Advance Feature END
 
 static int wpa_driver_nl80211_set_ap(void *priv,
 				     struct wpa_driver_ap_params *params)
@@ -4324,6 +4357,14 @@ static int wpa_driver_nl80211_set_ap(void *priv,
 			bss->bandwidth = params->freq->bandwidth;
 		}
 	}
+
+//NOTE: Bug#692685 Add for SoftAp Advance Feature BEG-->
+#ifndef CONFIG_NO_HOSTAPD_ADVANCE
+	if(!os_strcmp(bss->ifname, "wlan0")){
+		hostapd_init_block_list(bss);
+	}
+#endif
+//<-- Add for SoftAp Advance Feature END
 
 #ifdef CONFIG_MESH
 	if (is_mesh_interface(drv->nlmode) && params->ht_opmode != -1) {
@@ -5489,6 +5530,12 @@ static int nl80211_connect_common(struct wpa_driver_nl80211_data *drv,
 			ver |= NL80211_WPA_VERSION_1;
 		if (params->wpa_proto & WPA_PROTO_RSN)
 			ver |= NL80211_WPA_VERSION_2;
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+		if (params->wpa_proto & WPA_PROTO_WAPI)
+			ver |= NL80211_WAPI_VERSION_1;
+#endif
+//<-- Porting WAPI feature END
 
 		wpa_printf(MSG_DEBUG, "  * WPA Versions 0x%x", ver);
 		if (nla_put_u32(msg, NL80211_ATTR_WPA_VERSIONS, ver))
@@ -5518,6 +5565,12 @@ static int nl80211_connect_common(struct wpa_driver_nl80211_data *drv,
 	}
 
 	if (params->key_mgmt_suite == WPA_KEY_MGMT_IEEE8021X ||
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	    params->key_mgmt_suite == WPA_KEY_MGMT_WAPI_PSK ||
+	    params->key_mgmt_suite == WPA_KEY_MGMT_WAPI_CERT ||
+#endif
+//<-- Porting WAPI feature END
 	    params->key_mgmt_suite == WPA_KEY_MGMT_PSK ||
 	    params->key_mgmt_suite == WPA_KEY_MGMT_FT_IEEE8021X ||
 	    params->key_mgmt_suite == WPA_KEY_MGMT_FT_PSK ||
@@ -5593,6 +5646,18 @@ static int nl80211_connect_common(struct wpa_driver_nl80211_data *drv,
 		case WPA_KEY_MGMT_DPP:
 			mgmt = RSN_AUTH_KEY_MGMT_DPP;
 			break;
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+		case WPA_KEY_MGMT_WAPI_PSK:
+			wpa_printf(MSG_DEBUG, "WAPI: Set NL80211_ATTR_AKM_SUITES to RSN_AUTH_KEY_MGMT_WAPI_PSK");
+			mgmt = RSN_AUTH_KEY_MGMT_WAPI_PSK;
+			break;
+		case WPA_KEY_MGMT_WAPI_CERT:
+			wpa_printf(MSG_DEBUG, "WAPI: Set NL80211_ATTR_AKM_SUITES to RSN_AUTH_KEY_MGMT_WAPI_CERT");
+			mgmt = RSN_AUTH_KEY_MGMT_WAPI_CERT;
+			break;
+#endif
+//<-- Porting WAPI feature END
 		case WPA_KEY_MGMT_PSK:
 		default:
 			mgmt = RSN_AUTH_KEY_MGMT_PSK_OVER_802_1X;
@@ -9452,6 +9517,38 @@ static int nl80211_set_mac_addr(void *priv, const u8 *addr)
 	return 0;
 }
 
+static int nl80211_set_p2p_mac_addr(void *priv, const u8 *addr)
+{
+	struct i802_bss *bss = priv;
+	struct wpa_driver_nl80211_data *drv = bss->drv;
+	int new_addr = addr != NULL;
+
+	if (TEST_FAIL())
+		return -1;
+
+	if (!addr)
+		addr = drv->perm_addr;
+
+	u8 cmd[25];
+	char driver_cmd_reply_buf[4096] = {};
+	os_memset(cmd, 0, 25);
+	strncpy((char *)cmd, "P2PMACADDR ", 11);
+	os_memcpy(cmd+11, addr, ETH_ALEN);
+	if (wpa_driver_nl80211_driver_cmd(priv, (u8 *)cmd,
+			driver_cmd_reply_buf, sizeof(driver_cmd_reply_buf))) {
+		wpa_printf(MSG_ERROR, "nl80211: failed to set_p2p_mac_addr for %s to " MACSTR,
+				bss->ifname, MAC2STR(addr));
+		return -1;
+	}
+	wpa_printf(MSG_DEBUG,
+			"nl80211: Success to set_p2p_mac_addr for %s to " MACSTR,
+			bss->ifname, MAC2STR(addr));
+
+	drv->addr_changed = new_addr;
+	os_memcpy(bss->addr, addr, ETH_ALEN);
+
+	return 0;
+}
 
 #ifdef CONFIG_MESH
 
@@ -10987,6 +11084,7 @@ const struct wpa_driver_ops wpa_driver_nl80211_ops = {
 	.set_qos_map = nl80211_set_qos_map,
 	.set_wowlan = nl80211_set_wowlan,
 	.set_mac_addr = nl80211_set_mac_addr,
+	.set_p2p_mac_addr = nl80211_set_p2p_mac_addr,
 #ifdef CONFIG_MESH
 	.init_mesh = wpa_driver_nl80211_init_mesh,
 	.join_mesh = wpa_driver_nl80211_join_mesh,
@@ -11019,6 +11117,11 @@ const struct wpa_driver_ops wpa_driver_nl80211_ops = {
 	.configure_data_frame_filters = nl80211_configure_data_frame_filters,
 	.get_ext_capab = nl80211_get_ext_capab,
 	.update_connect_params = nl80211_update_connection_params,
+//NOTE: Bug#692718 Add Marlin2 802.11v develop in supplicant BEG-->
+#ifndef CONFIG_BCMDHD
+	.wnm_oper = wpa_driver_nl80211_driver_cmd_wnm,
+#endif
+//<-- Add Marlin2 802.11v develop in supplicant END
 	.send_external_auth_status = nl80211_send_external_auth_status,
 	.set_4addr_mode = nl80211_set_4addr_mode,
 };

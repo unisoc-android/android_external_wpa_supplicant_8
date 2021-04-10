@@ -51,12 +51,25 @@
 #include "acs.h"
 #include "hs20.h"
 
+//NOTE: Add for SoftAp Advance Feature BEG-->
+#ifndef CONFIG_NO_HOSTAPD_ADVANCE
+int driver_init_mac_acl(struct hostapd_data *hapd);
+#endif
+//<-- Add for SoftAp Advance Feature END
 
+
+//NOTE: Add for SoftAp Advance Feature BEG-->
+#ifdef CONFIG_NO_HOSTAPD_ADVANCE
+int driver_init_mac_acl(struct hostapd_data *hapd);
+#endif
+//<-- Add for SoftAp Advance Feature END
 static int hostapd_flush_old_stations(struct hostapd_data *hapd, u16 reason);
 static int hostapd_setup_encryption(char *iface, struct hostapd_data *hapd);
 static int hostapd_broadcast_wep_clear(struct hostapd_data *hapd);
 static int setup_interface2(struct hostapd_iface *iface);
 static void channel_list_update_timeout(void *eloop_ctx, void *timeout_ctx);
+struct hostapd_iface *iface_save;
+void updateHostapdSupportChannel();
 static void hostapd_interface_setup_failure_handler(void *eloop_ctx,
 						    void *timeout_ctx);
 
@@ -1321,7 +1334,7 @@ static void hostapd_tx_queue_params(struct hostapd_iface *iface)
 }
 
 
-static int hostapd_set_acl_list(struct hostapd_data *hapd,
+int hostapd_set_acl_list(struct hostapd_data *hapd,
 				struct mac_acl_entry *mac_acl,
 				int n_entries, u8 accept_acl)
 {
@@ -1353,7 +1366,11 @@ static void hostapd_set_acl(struct hostapd_data *hapd)
 	struct hostapd_config *conf = hapd->iconf;
 	int err;
 	u8 accept_acl;
-
+//NOTE: Bug#692685 Add for SoftAp Advance Feature BEG-->
+#ifndef CONFIG_NO_HOSTAPD_ADVANCE
+	driver_init_mac_acl(hapd);
+#else
+//<-- Add for SoftAp Advance Feature END
 	if (hapd->iface->drv_max_acl_mac_addrs == 0)
 		return;
 
@@ -1376,6 +1393,7 @@ static void hostapd_set_acl(struct hostapd_data *hapd)
 			return;
 		}
 	}
+#endif
 }
 
 
@@ -1445,9 +1463,9 @@ void hostapd_channel_list_updated(struct hostapd_iface *iface, int initiator)
 	setup_interface2(iface);
 }
 
-
 static int setup_interface(struct hostapd_iface *iface)
 {
+	iface_save = iface;
 	struct hostapd_data *hapd = iface->bss[0];
 	size_t i;
 

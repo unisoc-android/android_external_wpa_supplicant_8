@@ -893,6 +893,23 @@ void hostapd_event_connect_failed_reason(struct hostapd_data *hapd,
 
 
 #ifdef CONFIG_ACS
+void hostapd_soft_reset(struct hostapd_data *hapd)
+{
+	u8 old_channel = hapd->iface->conf->channel;
+
+	if (hostapd_disable_iface(hapd->iface)) {
+		wpa_printf(MSG_ERROR, "ACS: sprd softap reset: disable iface failed");
+		return;
+	}
+	hapd->iface->conf->channel = 0;
+	if (hostapd_enable_iface(hapd->iface)) {
+		hapd->iface->conf->channel = old_channel;
+		wpa_printf(MSG_ERROR, "ACS: sprd softap reset: enable iface failed");
+		return;
+	}
+
+	wpa_printf(MSG_ERROR, "ACS: sprd softap reset successfully");
+}
 void hostapd_acs_channel_selected(struct hostapd_data *hapd,
 				  struct acs_selected_channels *acs_res)
 {
@@ -1789,6 +1806,9 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 	case EVENT_ACS_CHANNEL_SELECTED:
 		hostapd_acs_channel_selected(hapd,
 					     &data->acs_selected_channels);
+		break;
+	case EVENT_SPRD_SOFT_RESET:
+		hostapd_soft_reset(hapd);
 		break;
 #endif /* CONFIG_ACS */
 	case EVENT_STATION_OPMODE_CHANGED:

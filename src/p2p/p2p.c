@@ -235,6 +235,7 @@ void p2p_go_neg_failed(struct p2p_data *p2p, int status)
 		p2p_set_state(p2p, P2P_IDLE);
 	}
 
+	peer->go_neg_req_sent = 0;
 	peer->flags &= ~P2P_DEV_PEER_WAITING_RESPONSE;
 	peer->wps_method = WPS_NOT_READY;
 	peer->oob_pw_id = 0;

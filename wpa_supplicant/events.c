@@ -49,16 +49,24 @@
 #include "mesh_mpm.h"
 #include "wmm_ac.h"
 #include "dpp_supplicant.h"
-
+#include "wpa_i.h"
 
 #define MAX_OWE_TRANSITION_BSS_SELECT_COUNT 5
 
+#define WPA_EVENT_OFFLOAD_ROAM_NOTIFY "CTRL-EVENT-OFFLOAD-ROAM-NOTIFY "
 
 #ifndef CONFIG_NO_SCAN_PROCESSING
 static int wpas_select_network_from_last_scan(struct wpa_supplicant *wpa_s,
 					      int new_scan, int own_request);
 #endif /* CONFIG_NO_SCAN_PROCESSING */
 
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+int wpa_supplicant_event_assoc_wapi_network(struct wpa_supplicant *wpa_s, int freq);
+int wpa_supplicant_event_disassoc_wapi_network_finish(struct wpa_supplicant *wpa_s,
+		u16 reason_code, int locally_generated);
+#endif
+//<-- Porting WAPI feature END
 
 int wpas_temp_disabled(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid)
 {
@@ -343,6 +351,28 @@ static void wpa_find_assoc_pmkid(struct wpa_supplicant *wpa_s)
 	struct wpa_ie_data ie;
 	int pmksa_set = -1;
 	size_t i;
+	//NOTE: Bug#515092 Add 11r/okc roaming offload develop in supplicant BEG-->
+	u8 bssid[ETH_ALEN];
+	struct wpa_ssid *ssid = wpa_s->current_ssid;
+
+	if((wpa_s->wpa_state == WPA_COMPLETED) && ssid->proactive_key_caching&&
+		wpa_key_mgmt_wpa(ssid->key_mgmt)){
+		if (wpa_drv_get_bssid(wpa_s, bssid) < 0) {
+			wpa_dbg(wpa_s, MSG_ERROR, "Failed to get BSSID");
+			wpa_supplicant_deauthenticate(
+				wpa_s, WLAN_REASON_DEAUTH_LEAVING);
+			return;
+		}
+		int try_opportunistic = 1;
+		if (pmksa_cache_set_current(wpa_s->wpa, NULL, bssid,
+					    ssid, try_opportunistic, NULL, 0) == 0){
+			eapol_sm_notify_pmkid_attempt(wpa_s->eapol);
+			wpas_notify_offload_roam(wpa_s, WPA_EVENT_OFFLOAD_ROAM_NOTIFY"- Associated to a new BSSID:"MACSTR);
+			wpa_dbg(wpa_s, MSG_DEBUG, "RSN: OKC PMKSA set and try offload OKC roaming");
+			return;
+		}
+	}
+	//<-- Add 11r/okc roaming offload develop in supplicant END
 
 	if (wpa_sm_parse_own_wpa_ie(wpa_s->wpa, &ie) < 0 ||
 	    ie.pmkid == NULL)
@@ -357,6 +387,13 @@ static void wpa_find_assoc_pmkid(struct wpa_supplicant *wpa_s)
 			break;
 		}
 	}
+
+	//SPRD: Bug #633317 Add for 11r/okc offload roaming BEG-->
+	if (wpa_s->wpa_state == WPA_COMPLETED) {
+		wpa_dbg(wpa_s, MSG_DEBUG, "wpa_find_assoc_pmkid:the RSN ie Contains PMKID,it is a 11r roaming,Notify!!");
+		wpas_notify_offload_roam(wpa_s, WPA_EVENT_OFFLOAD_ROAM_NOTIFY"- Associated to a new BSSID:"MACSTR);
+	}
+	//<-- Add for 11r/okc offload roaming END
 
 	wpa_dbg(wpa_s, MSG_DEBUG, "RSN: PMKID from assoc IE %sfound from "
 		"PMKSA cache", pmksa_set == 0 ? "" : "not ");
@@ -1183,6 +1220,26 @@ struct wpa_ssid * wpa_scan_res_match(struct wpa_supplicant *wpa_s,
 					"   skip - BSSID not in whitelist");
 			continue;
 		}
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+		const u8 *wapi_ie;
+		u8 wapi_ie_len;
+		//wapi_ie = wpa_bss_get_ie(bss, WLAN_EID_WAPI);
+		wapi_ie = wpa_bss_get_ie(bss, WLAN_EID_BSS_AC_ACCESS_DELAY);
+		if ((ssid->proto & WPA_PROTO_WAPI) && wapi_ie) {
+			if(os_strcmp(wpa_s->ifname,"wlan0")) return NULL;
+			if ((ssid->key_mgmt & WPA_KEY_MGMT_WAPI_PSK) && (wapi_ie[9] == 2)) {
+				wpa_printf(MSG_DEBUG, "WAPI: PSK network is selected based on WAPI IE");
+				return ssid;
+			}
+			if ((ssid->key_mgmt & WPA_KEY_MGMT_WAPI_CERT) && (wapi_ie[9] == 1)) {
+				wpa_printf(MSG_DEBUG, "WAPI: CERT network is selected based on WAPI IE");
+				return ssid;
+			}
+		}
+#endif
+//<-- Porting WAPI feature END
 
 		if (!wpa_supplicant_ssid_bss_match(wpa_s, ssid, bss,
 						   debug_print))
@@ -2723,6 +2780,7 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 	u8 bssid[ETH_ALEN];
 	int ft_completed, already_authorized;
 	int new_bss = 0;
+	const u8 *ptk;
 
 #ifdef CONFIG_AP
 	if (wpa_s->ap_iface) {
@@ -2736,6 +2794,14 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 		return;
 	}
 #endif /* CONFIG_AP */
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	if (wpa_supplicant_event_assoc_wapi_network(wpa_s, data->assoc_info.freq) != -1) {
+		return;
+	}
+#endif
+//<-- Porting WAPI feature END
 
 	eloop_cancel_timeout(wpas_network_reenabled, wpa_s, NULL);
 
@@ -2757,6 +2823,66 @@ static void wpa_supplicant_event_assoc(struct wpa_supplicant *wpa_s,
 		return;
 	}
 
+#ifdef CONFIG_SAE
+	/* process SAE PMK & PMKID */
+	if (wpa_key_mgmt_sae(wpa_s->key_mgmt) &&
+		wpa_s->sme.sae_pmksa_caching == 0) {
+		const u8 *pmk = wpa_get_vendor_ie(data->assoc_info.resp_ies,
+				data->assoc_info.resp_ies_len, SPRD_SAE_CNN_RES);
+		if (!pmk) {
+			wpa_dbg(wpa_s, MSG_ERROR, "SPRD SAE fatal error: no PMK found");
+			wpa_supplicant_deauthenticate(
+				wpa_s, WLAN_REASON_DEAUTH_LEAVING);
+			return;
+		}
+		wpa_hexdump(MSG_INFO, "SPRD SAE auth results-1:", pmk, 2 + 4 + PMK_LEN + PMKID_LEN);
+		pmk += 6; /* skip vendor IE header: 1 id + 1 len + 4 OUI */
+		wpa_hexdump(MSG_INFO, "SPRD SAE auth results-2:", pmk, PMK_LEN);
+		wpa_hexdump(MSG_INFO, "SPRD SAE auth results-3:", pmk + PMK_LEN, PMKID_LEN);
+		wpa_printf(MSG_INFO, "SPRD SAE completed - SET PMK for 4-way handshake");
+		/* 32 bytes PMK + 16 bytes PMKID from CP2 SAE auth */
+		wpa_sm_set_pmk(wpa_s->wpa, pmk, PMK_LEN, pmk + PMK_LEN, bssid);
+       }
+#endif
+
+	//NOTE: Bug#515092 Add 11r/okc roaming offload develop in supplicant BEG-->
+	if (wpa_s->wpa_state == WPA_COMPLETED && wpa_key_mgmt_ft(wpa_s->key_mgmt) ) {
+		if (os_memcmp(bssid, wpa_s->bssid, ETH_ALEN) != 0 &&
+		    !is_zero_ether_addr(bssid)) {
+			wpa_dbg(wpa_s, MSG_DEBUG, "FT: Assume FT reassoc completed by driver.");
+
+			wpa_supplicant_set_state(wpa_s, WPA_ASSOCIATED);
+			wpa_dbg(wpa_s, MSG_DEBUG, "Associated to a new BSS: BSSID="
+				MACSTR, MAC2STR(bssid));
+			random_add_randomness(bssid, ETH_ALEN);
+			os_memcpy(wpa_s->bssid, bssid, ETH_ALEN);
+			os_memset(wpa_s->pending_bssid, 0, ETH_ALEN);
+			wpa_supplicant_set_state(wpa_s, WPA_COMPLETED);
+			wpa_hexdump(MSG_DEBUG, "tail of resp ie: ",
+				data->assoc_info.resp_ies + data->assoc_info.resp_ies_len - 54, 32);
+			/* update PTK after 11r roaming finished */
+			ptk = wpa_get_vendor_ie(data->assoc_info.resp_ies,
+						data->assoc_info.resp_ies_len, 0x4045da01);
+			if (ptk) {
+				/* skip vendor IE 6 = dd + len + 4OUI header */
+				ptk += 6;
+				wpa_printf(MSG_DEBUG, "11r roaming, update kck, kek, tk, bssid");
+				wpa_hexdump(MSG_DEBUG, "PTK: ", ptk, 32);
+				os_memcpy(wpa_s->wpa->ptk.kck, ptk, 16);
+				os_memcpy(wpa_s->wpa->ptk.kek, ptk + 16, 16);
+				os_memcpy(wpa_s->wpa->ptk.tk, ptk + 16 + 16, 16);
+				wpa_s->wpa->rx_replay_counter_set = 0;
+				os_memcpy(wpa_s->wpa->bssid, bssid, ETH_ALEN);
+				wpa_hexdump(MSG_DEBUG, "FT: KCK", wpa_s->wpa->ptk.kck, 16);
+				wpa_hexdump(MSG_DEBUG, "FT: KEK", wpa_s->wpa->ptk.kek, 16);
+				wpa_hexdump(MSG_DEBUG, "FT: TK", wpa_s->wpa->ptk.tk, 16);
+				wpa_dbg(wpa_s, MSG_DEBUG, "wpa sm: bssid="
+					MACSTR, MAC2STR(bssid));
+			}
+			return;
+		}
+	}
+	//<-- Add 11r/okc roaming offload develop in supplicant END
 	wpa_supplicant_set_state(wpa_s, WPA_ASSOCIATED);
 	if (os_memcmp(bssid, wpa_s->bssid, ETH_ALEN) != 0) {
 		if (os_reltime_initialized(&wpa_s->session_start)) {
@@ -3031,6 +3157,14 @@ static void wpa_supplicant_event_disassoc_finish(struct wpa_supplicant *wpa_s,
 
 	authenticating = wpa_s->wpa_state == WPA_AUTHENTICATING;
 	os_memcpy(prev_pending_bssid, wpa_s->pending_bssid, ETH_ALEN);
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	if (wpa_supplicant_event_disassoc_wapi_network_finish(wpa_s, reason_code, locally_generated) != -1) {
+		return;
+	}
+#endif
+//<-- Porting WAPI feature END
 
 	if (wpa_s->key_mgmt == WPA_KEY_MGMT_WPA_NONE) {
 		/*
@@ -3328,6 +3462,18 @@ wpa_supplicant_event_interface_status(struct wpa_supplicant *wpa_s,
 			wpa_s->global->p2p_init_wpa_s = NULL;
 		}
 #endif /* CONFIG_P2P */
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+		if (wpa_s->wapi) {
+			dlclose(wpa_s->wapi->handle);
+			l2_packet_deinit(wpa_s->wapi->l2_wapi);
+			wpa_s->wapi->l2_wapi = NULL;
+			os_free(wpa_s->wapi);
+			wpa_s->wapi = NULL;
+		}
+#endif
+//<-- Porting WAPI feature END
 
 #ifdef CONFIG_MATCH_IFACE
 		if (wpa_s->matched) {
@@ -4991,3 +5137,74 @@ void wpa_supplicant_event_global(void *ctx, enum wpa_event_type event,
 	if (wpa_s)
 		wpa_supplicant_event(wpa_s, event, data);
 }
+
+//=============================================================================
+// add by sprd start
+//=============================================================================
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+int wpa_supplicant_event_assoc_wapi_network(struct wpa_supplicant *wpa_s, int freq){
+	u8 bssid[ETH_ALEN];
+	if (wpa_s->current_ssid && (wpa_s->current_ssid->proto & WPA_PROTO_WAPI) && wpa_s->wapi) {
+		u8 *ap_wapi_ie;
+		u8 ap_wapi_ie_len;
+
+		wpa_printf(MSG_DEBUG,"WAPI: %s: associated to a wapi network.\n", __FUNCTION__);
+		if (wpa_drv_get_bssid(wpa_s, bssid) >= 0 &&
+			os_memcmp(bssid, wpa_s->bssid, ETH_ALEN) != 0) {
+			wpa_msg(wpa_s, MSG_DEBUG, "Associated to a new BSS: BSSID="
+				MACSTR, MAC2STR(bssid));
+			os_memcpy(wpa_s->bssid, bssid, ETH_ALEN);
+			os_memset(wpa_s->pending_bssid, 0, ETH_ALEN);
+		}
+
+		if(wpa_s->current_bss == NULL)
+			return 0;
+		//ap_wapi_ie = wpa_bss_get_ie(wpa_s->current_bss, WLAN_EID_WAPI);
+		ap_wapi_ie = wpa_bss_get_ie(wpa_s->current_bss, WLAN_EID_BSS_AC_ACCESS_DELAY);
+		ap_wapi_ie_len = ap_wapi_ie ? 2 + ap_wapi_ie[1] : 0;
+
+		wpa_s->wapi->wapi_process_assoc_event(bssid, wpa_s->own_addr, ap_wapi_ie, ap_wapi_ie_len);
+
+		wpa_supplicant_cancel_auth_timeout(wpa_s);
+		wpa_supplicant_set_state(wpa_s, WPA_ASSOCIATED);
+		wpa_msg(wpa_s, MSG_INFO, "Associated with " MACSTR, MAC2STR(bssid));
+		wpa_s->assoc_freq = freq;
+		wpa_printf(MSG_DEBUG,"wpa_s->assoc_freq = %u \n", wpa_s->assoc_freq);
+		return 0;
+	}
+	return -1;
+}
+
+
+int wpa_supplicant_event_disassoc_wapi_network_finish(struct wpa_supplicant *wpa_s,
+						 u16 reason_code,
+						 int locally_generated) {
+	const u8 *bssid;
+	if (wpa_s->current_ssid && (wpa_s->current_ssid->proto == WPA_PROTO_WAPI) && wpa_s->wapi) { /* this is a WAPI network */
+
+		wpa_s->wapi->wapi_process_disassoc_event(wpa_s->bssid, wpa_s->own_addr);
+
+		if (wpa_s->wpa_state >= WPA_ASSOCIATED)
+			wpa_supplicant_req_scan(wpa_s, 0, 100000);
+		bssid = wpa_s->bssid;
+		if (os_memcmp(bssid, "\x00\x00\x00\x00\x00\x00", ETH_ALEN) == 0)
+			bssid = wpa_s->pending_bssid;
+		wpa_blacklist_add(wpa_s, bssid);
+		wpa_msg(wpa_s, MSG_INFO, WPA_EVENT_DISCONNECTED "- Disconnect event - "
+			"remove keys");
+		if (locally_generated)
+			wpa_s->disconnect_reason = -reason_code;
+		else
+			wpa_s->disconnect_reason = reason_code;
+		wpas_notify_disconnect_reason(wpa_s);
+		wpa_supplicant_mark_disassoc(wpa_s);
+		wpas_connect_work_done(wpa_s);
+
+		return 0;
+	}
+	return -1;
+}
+#endif
+//<-- Porting WAPI feature END

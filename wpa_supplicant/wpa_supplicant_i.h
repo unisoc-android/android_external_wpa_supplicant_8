@@ -501,6 +501,38 @@ struct wpa_supplicant {
 	unsigned char own_addr[ETH_ALEN];
 	unsigned char perm_addr[ETH_ALEN];
 	char ifname[100];
+
+//SPRD: Bug #474464 Porting WAPI feature BEG-->
+#ifdef CONFIG_WAPI
+	struct wapi {
+		void *handle; /* dl handle */
+		struct l2_packet_data *l2_wapi;
+		u8 assoc_wapi_ie[256];
+		u8 assoc_wapi_ie_len;
+		/* funciton callbacks used in lib */
+		void (*wapi_msg)(void *, int, const char *, ...);
+		void (*wapi_printf)(int, const char *, ...);
+		void (*wapi_hexdump)(int, const char *, const void *, size_t);
+		int (*l2_packet_send)(struct l2_packet_data *, const u8 *, u16, const u8 *, size_t);
+		void (*wapi_deauth)(struct wpa_supplicant *, int);
+		void (*wapi_set_state)(struct wpa_supplicant *, enum wpa_states);
+		void (*wapi_disconnect_notify)(struct wpa_supplicant *, const char *);
+		/* call back from wapi lib */
+		int (*wapi_build_assoc_params)(struct wpa_ssid *);
+		void (*wapi_rx_wai)(void *, const u8 *, const u8 *, size_t);
+		void (*wpa_global_priv)(struct wpa_global *);
+		void (*iwn_set_debug_level)(int); /* for wapilib debug */
+		void (*wapi_process_assoc_event)(u8 *, u8 *, u8 *, u8);
+		void (*wapi_process_disassoc_event)(u8 *, u8 *);
+		/* both init and exit function will exec by loader & linker
+		 * which is tagged with constructor & destructor compiler attribute
+		 * int (*WIFI_lib_init)(void);
+		 * int (*WIFI_lib_exit)(void);
+		 */
+	} *wapi;
+#endif
+//<-- Porting WAPI feature END
+
 #ifdef CONFIG_MATCH_IFACE
 	int matched;
 #endif /* CONFIG_MATCH_IFACE */

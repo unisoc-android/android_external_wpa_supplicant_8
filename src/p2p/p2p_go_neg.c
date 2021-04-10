@@ -16,6 +16,10 @@
 #include "p2p_i.h"
 #include "p2p.h"
 
+/*
+ * p2p GO Negotiation timeout
+ */
+#define P2P_GO_NEGOTIATION_TIMEOUT 120
 
 static int p2p_go_det(u8 own_intent, u8 peer_value)
 {
@@ -251,6 +255,7 @@ int p2p_connect_send(struct p2p_data *p2p, struct p2p_device *dev)
 	p2p->pending_action_state = P2P_PENDING_GO_NEG_REQUEST;
 	p2p->go_neg_peer = dev;
 	eloop_cancel_timeout(p2p_go_neg_wait_timeout, p2p, NULL);
+	eloop_register_timeout(P2P_GO_NEGOTIATION_TIMEOUT, 0, p2p_go_neg_wait_timeout, p2p, NULL);
 	dev->flags |= P2P_DEV_WAIT_GO_NEG_RESPONSE;
 	dev->connect_reqs++;
 	if (p2p_send_action(p2p, freq, dev->info.p2p_device_addr,
@@ -1185,7 +1190,7 @@ void p2p_process_go_neg_resp(struct p2p_data *p2p, const u8 *sa,
 			dev->flags |= P2P_DEV_NOT_YET_READY;
 			eloop_cancel_timeout(p2p_go_neg_wait_timeout, p2p,
 					     NULL);
-			eloop_register_timeout(120, 0, p2p_go_neg_wait_timeout,
+			eloop_register_timeout(P2P_GO_NEGOTIATION_TIMEOUT, 0, p2p_go_neg_wait_timeout,
 					       p2p, NULL);
 			if (p2p->state == P2P_CONNECT_LISTEN)
 				p2p_set_state(p2p, P2P_WAIT_PEER_CONNECT);

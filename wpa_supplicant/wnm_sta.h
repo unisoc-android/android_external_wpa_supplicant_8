@@ -65,6 +65,13 @@ int wnm_send_bss_transition_mgmt_query(struct wpa_supplicant *wpa_s,
 				       int cand_list);
 
 void wnm_deallocate_memory(struct wpa_supplicant *wpa_s);
+
+//NOTE: Bug#519201 Add Marlin2 802.11v develop in supplicant BEG-->
+int ieee802_11_send_wnmtfs_req(struct wpa_supplicant *wpa_s, struct wpabuf *tfs_req);
+
+int ieee802_11_send_wnmdms_req(struct wpa_supplicant *wpa_s, struct wpabuf *dms_req);
+//<-- Add Marlin2 802.11v develop in supplicant END
+
 int wnm_send_coloc_intf_report(struct wpa_supplicant *wpa_s, u8 dialog_token,
 			       const struct wpabuf *elems);
 void wnm_set_coloc_intf_elems(struct wpa_supplicant *wpa_s,

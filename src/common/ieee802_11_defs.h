@@ -1005,6 +1005,22 @@ struct ieee80211_mgmt {
 					 * Entries (optional) */
 					u8 variable[];
 				} STRUCT_PACKED bss_tm_query;
+				//NOTE: Bug#519201 Add Marlin2 802.11v develop in supplicant BEG-->
+				struct {
+					u8 action;
+					u8 dialogtoken;
+					u8 eid;
+					u8 len;
+					u8 variable[0];
+				} STRUCT_PACKED wnm_tfs_req;
+				struct {
+					u8 action;
+					u8 dialogtoken;
+					u8 eid;
+					u8 len;
+					u8 variable[0];
+				} STRUCT_PACKED wnm_dms_req;
+				//<-- Add Marlin2 802.11v develop in supplicant END
 				struct {
 					u8 action; /* 11 */
 					u8 dialog_token;
@@ -1285,6 +1301,13 @@ struct ieee80211_ampe_ie {
 #define WMM_IE_VENDOR_TYPE 0x0050f202
 #define WPS_IE_VENDOR_TYPE 0x0050f204
 #define OUI_WFA 0x506f9a
+/* SPRD vendor SAE OUI */
+#define SPRD_SAE_CNN_OUI 0x4045da02
+#define SPRD_SAE_CNN_RES 0x4045da03
+#define SPRD_SAE_CNN_PW 0x00
+#define SPRD_SAE_CNN_GRPID 0x01
+#define SPRD_SAE_CNN_PWID 0x02
+
 #define P2P_IE_VENDOR_TYPE 0x506f9a09
 #define WFD_IE_VENDOR_TYPE 0x506f9a0a
 #define WFD_OUI_TYPE 10

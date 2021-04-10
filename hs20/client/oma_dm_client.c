@@ -245,8 +245,12 @@ static void add_replace_devinfo(struct hs20_osu_client *ctx, xml_node_t *parent,
 	xml_node_t *info, *child, *replace;
 	const char *name;
 	char locuri[200], *txt;
-
+#ifdef HS20_WFA_CERTIFICATION
+	info = node_from_file(ctx->xml, "/data/misc/wifi/devinfo.xml");
+#else
 	info = node_from_file(ctx->xml, "devinfo.xml");
+#endif
+
 	if (info == NULL) {
 		wpa_printf(MSG_INFO, "Could not read devinfo.xml");
 		return;
@@ -314,8 +318,12 @@ static xml_node_t * build_oma_dm_1(struct hs20_osu_client *ctx,
 
 	cmdid++;
 	add_alert(ctx, syncbody, cmdid, DM_CLIENT_INITIATED_MGMT);
-
+#ifdef HS20_WFA_CERTIFICATION
+	str = mo_str(ctx, NULL, "/data/misc/wifi/devdetail.xml");
+#else
 	str = mo_str(ctx, NULL, "devdetail.xml");
+#endif
+
 	if (str == NULL) {
 		xml_node_free(ctx->xml, syncml);
 		return NULL;

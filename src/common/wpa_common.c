@@ -1076,8 +1076,28 @@ int wpa_ft_parse_ies(const u8 *ies, size_t ies_len,
 
 	return 0;
 }
+
+
 #endif /* CONFIG_IEEE80211R */
 
+const u8 * wpa_get_vendor_ie(const u8 *ies, size_t ie_len, u32 vendor_type)
+{
+	const u8 *end, *pos;
+
+	pos = ies;
+	end = ies + ie_len;
+
+	while (end - pos > 1) {
+		if (2 + pos[1] > end - pos)
+			break;
+		if (pos[0] == WLAN_EID_VENDOR_SPECIFIC && pos[1] >= 4 &&
+		    vendor_type == WPA_GET_BE32(&pos[2]))
+			return pos;
+		pos += 2 + pos[1];
+	}
+
+	return NULL;
+}
 
 static int rsn_selector_to_bitfield(const u8 *s)
 {

@@ -145,6 +145,7 @@ struct hostapd_data {
 	unsigned int started:1;
 	unsigned int disabled:1;
 	unsigned int reenable_beacon:1;
+	struct hostapd_hidl_priv *hidl;
 
 	u8 own_addr[ETH_ALEN];
 
@@ -260,6 +261,9 @@ struct hostapd_data {
 
 	void (*setup_complete_cb)(void *ctx);
 	void *setup_complete_cb_ctx;
+
+	void (*sta_info_event_cb)(char* data);
+	void *sta_info_event_cb_ctx;
 
 	void (*new_psk_cb)(void *ctx, const u8 *mac_addr,
 			   const u8 *p2p_dev_addr, const u8 *psk,
@@ -411,6 +415,7 @@ struct hostapd_iface {
 	char *config_fname;
 	struct hostapd_config *conf;
 	char phy[16]; /* Name of the PHY (radio) */
+	struct hostapd_hidl_priv *hidl;
 
         enum hostapd_iface_state state;
 #ifdef CONFIG_MESH
